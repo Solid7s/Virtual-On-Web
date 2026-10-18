@@ -66,7 +66,7 @@ function stickUnit(side) {
     <div class="stick-diagram">
       ${stickArtwork(side)}
       ${[['dash', 'Dash'], ['weapon', 'Weapon'], ['move', 'Move']].map(([part, label]) => `
-        <button class="stick-callout stick-callout--${part}" type="button" data-part="${part}" aria-pressed="false">
+        <button class="stick-callout stick-callout--${part}" type="button" data-part="${part}">
           <span class="stick-action">${label}</span>
           <span class="stick-binding" data-binding="${side}.${part}"></span>
         </button>`).join('')}
@@ -135,23 +135,33 @@ export function renderVirtualOnControls(root) {
     });
   }
   for (const unit of root.querySelectorAll('.stick-unit')) {
-    let selected = '', hovered = '', focused = '';
+    let hovered = '', focused = '', pressed = '';
     const buttons = [...unit.querySelectorAll('[data-part]')];
     const highlight = () => {
-      unit.dataset.highlight = hovered || focused || selected;
+      unit.dataset.highlight = pressed || hovered || focused;
       for (const button of buttons) {
         button.classList.toggle('is-highlighted', button.dataset.part === unit.dataset.highlight);
-        button.setAttribute('aria-pressed', String(button.dataset.part === selected));
       }
     };
     for (const button of buttons) {
       const part = button.dataset.part;
       button.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') { hovered = part; highlight(); } });
-      button.addEventListener('pointerleave', () => { hovered = ''; highlight(); });
-      button.addEventListener('focus', () => { focused = part; highlight(); });
+      button.addEventListener('pointerleave', () => { hovered = pressed = ''; highlight(); });
+      button.addEventListener('pointerdown', event => {
+        focused = ''; pressed = part;
+        if (event.pointerType === 'touch') hovered = '';
+        highlight();
+      });
+      // Mouse/touch focus must not keep a clicked control highlighted.
+      button.addEventListener('focus', () => { focused = button.matches(':focus-visible') ? part : ''; highlight(); });
       button.addEventListener('blur', () => { focused = ''; highlight(); });
-      button.addEventListener('click', () => { selected = selected === part ? '' : part; highlight(); });
+      button.addEventListener('keydown', () => { focused = part; highlight(); });
+      button.addEventListener('click', event => { if (event.detail > 0) focused = ''; highlight(); });
     }
+    const release = () => { pressed = ''; highlight(); };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    window.addEventListener('blur', () => { hovered = focused = pressed = ''; highlight(); });
   }
   selectInput('keyboard');
 }
