@@ -23,7 +23,7 @@ instruction semantics incorporate credited MAME and Daytona recompilation code.
    merged archive is sufficient; for split sets, select `von.zip` together with
    the regional `vonu.zip` or `vonj.zip`. ROM contents are checked before starting.
 3. Choose **Classic**, **Enhanced**, or **Enhanced+**, then **Launch Virtual-On**.
-4. Click the game to focus controls and enable audio. Press **5**, then **Enter**.
+4. Press **5** to insert coin, then press **Enter** to start.
 
 ROM files are read locally in the browser; the application does not upload them.
 Older `von.zip` archives may contain a supported regional program at the root;
