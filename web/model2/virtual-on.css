@@ -38,6 +38,8 @@ button:focus-visible,input:focus-visible{outline-color:#007d83}
 .stick-dot{width:6px;height:6px;border-radius:50%;background:var(--stick-accent)}
 .stick-diagram{position:relative;width:100%;aspect-ratio:440 / 310;min-height:310px}
 .stick-art{display:block;width:100%;height:100%;overflow:visible}
+.stick-unit[data-side=left]{background:radial-gradient(ellipse at 70% 58%,#f1f7f8 0,transparent 60%)}
+.stick-unit[data-side=left] .stick-art{transform:scaleX(-1)}
 .stick-accent{fill:var(--stick-accent)}
 .stick-halo{fill:none;stroke:var(--stick-accent);stroke-width:2;opacity:0;transition:opacity .16s ease}
 .stick-direction{fill:none;stroke:var(--stick-accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.6}
@@ -55,6 +57,9 @@ button:focus-visible,input:focus-visible{outline-color:#007d83}
 .stick-key-grid kbd:nth-child(2){grid-column:1;grid-row:2}
 .stick-key-grid kbd:nth-child(3){grid-column:2;grid-row:2}
 .stick-key-grid kbd:nth-child(4){grid-column:3;grid-row:2}
+.stick-unit[data-side=left] .stick-callout{left:auto;right:57%;text-align:right}
+.stick-unit[data-side=left] .stick-binding{justify-content:flex-end}
+.stick-unit[data-side=left] .stick-key-grid{margin-left:auto}
 .stick-callout.is-highlighted{background:var(--stick-wash);border-color:var(--stick-accent)}
 .stick-callout:focus-visible{outline:2px solid var(--stick-accent);outline-offset:2px}
 .stick-unit[data-highlight=dash] .stick-part--dash .stick-halo,.stick-unit[data-highlight=weapon] .stick-part--weapon .stick-halo,.stick-unit[data-highlight=move] .stick-part--move .stick-halo{opacity:1}
