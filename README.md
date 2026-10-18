@@ -18,13 +18,20 @@ instruction semantics incorporate credited MAME and Daytona recompilation code.
 
 1. Open the [website](https://solid7s.github.io/Virtual-On-Web/) in a browser with
    WebGPU support. Desktop Chrome is the browser used for validation.
-2. Select your own supported ROM ZIP: **USA Revision B (`vonu.zip`)** or
-   **Japan Revision B (`vonj.zip`)**. Required parent/shared files must be present
-   in the selected archives. ROM contents are checked before starting.
+2. Select your own **`von.zip` parent ROM archive**. The player automatically
+   detects a supported **USA or Japan Revision B** program inside it. A complete
+   merged archive is sufficient; for split sets, select `von.zip` together with
+   the regional `vonu.zip` or `vonj.zip`. ROM contents are checked before starting.
 3. Choose **Classic**, **Enhanced**, or **Enhanced+**, then **Launch Virtual-On**.
 4. Click the game to focus controls and enable audio. Press **5**, then **Enter**.
 
 ROM files are read locally in the browser; the application does not upload them.
+Older `von.zip` archives may contain a supported regional program at the root;
+merged parents may place it in a regional subfolder. When only subfolder choices
+are available, USA is preferred, then Japan. An Export-only parent needs the
+supported regional archive as well. Renaming an unsupported ROM does not make it
+compatible. Complete standalone regional archives also remain supported.
+
 No ROM archives or extracted graphics/audio ROM files are provided. The included
 WebAssembly binary **does contain translated instructions derived from the game
 programs**; the ROM requirement does not change that. See [NOTICE.md](NOTICE.md).
@@ -82,6 +89,8 @@ allowlisted GitHub Pages site in `_site/`.
 For browser development checks, run `npm ci`, install Google Chrome, and use
 `TEST_ROM_DIR=/path/to/your/roms npm run test:player -- vonu enhanced-plus` with
 the local server running. The browser test uses your own USA and Japan archives.
+Set `TEST_ROM=/path/to/von.zip` to exercise a parent archive; the test's game
+argument must match its detected region (`vonu` or `vonj`).
 See [BUILDING.md](BUILDING.md) for offline engine rebuilding.
 
 ## Credits and rights

@@ -72,7 +72,7 @@ export async function importVirtualOn(Module, game, archives, manifest, progress
     const region = new Uint8Array(size).fill(fill);
     for (const [i, chip] of chips.entries()) {
       const entry = entries.find(e => e.name === `${game}/${chip}`) || entries.find(e => e.base === chip);
-      if (!entry) throw Error(`Missing ${chip}. Include the parent ROM ZIP if this is a split set.`);
+      if (!entry) throw Error(`Missing ${chip}. Select the parent von.zip archive and, for a split set, its ${game}.zip together.`);
       const bytes = await extract(entry, chipSize), offset = Math.floor(i / 2) * pairStride + (i % 2) * 2;
       if (!pairStride) {
         for (let j = 0; j < bytes.length; j += 2) {

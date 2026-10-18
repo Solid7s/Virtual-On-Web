@@ -91,13 +91,14 @@ async function detectSelectedFiles() {
     let matches = detectGames(games, files);
     if (matches.length === 1 && matches[0].id === 'von') {
       message('romDetection', 'Checking Virtual-On ROM revision…');
-      const revision = await virtualOnRevision(files.find(file => file.name.toLowerCase() === 'von.zip'));
+      const revision = await virtualOnRevision(files.find(file => file.name.toLowerCase() === 'von.zip'),
+        { compiledOnly: standaloneRequested });
       if (request !== detection) return;
       if (revision) matches = games.filter(game => game.id === revision);
     }
     if (matches.length === 1) {
       if (virtualOnPage && !['vonu', 'vonj'].includes(matches[0].id)) {
-        throw Error('Choose a Virtual-On USA or Japan Revision B ROM ZIP.');
+        throw Error('Choose the Virtual-On parent archive, von.zip, containing USA or Japan Revision B. For a split set, also select its vonu.zip or vonj.zip.');
       }
       selected = matches[0];
       validateSelection(selected, games, files);
@@ -106,7 +107,7 @@ async function detectSelectedFiles() {
       message('romDetection', 'Multiple games detected. Choose the ZIP files for one game at a time.');
     } else {
       message('romDetection', virtualOnPage
-        ? 'Choose a Virtual-On ROM ZIP, such as vonu.zip or vonj.zip.'
+        ? 'Choose the Virtual-On parent ROM archive, von.zip.'
         : 'Game not recognized. Use the original ROM ZIP filename, such as vf2.zip.');
     }
   } catch (err) {

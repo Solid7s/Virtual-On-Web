@@ -26,6 +26,8 @@ tools/emsdk/emsdk activate 6.0.2
 Place your complete USA and Japan Revision B ZIPs at `roms/ready/vonu.zip` and
 `roms/ready/vonj.zip`. Both regions are compiled into the player. Archives must
 contain the shared data as well as the regional CPU programs. Do not commit them.
+These are offline compiler input filenames; the browser's primary input is the
+`von.zip` parent archive described in [README.md](README.md).
 
 ```sh
 python3 scripts/build_virtual_on_standalone.py --player --wasm
