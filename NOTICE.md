@@ -6,7 +6,7 @@ authors of reused software is implied.
 
 ## Original game
 
-© SEGA. Characters © SEGA/AUTOMUSS. Character design: KATOKI HAJIME.
+© SEGA. Characters © SEGA/AUTOMUSS. Character design: Hajime Katoki.
 
 Credits follow [SEGA's original arcade game page](https://www.sega.jp/history/arcade/product/9046/).
 SEGA and Virtual-On names, trademarks, logos, game programs, artwork, music,

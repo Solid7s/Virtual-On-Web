@@ -94,7 +94,7 @@ See [BUILDING.md](BUILDING.md) for offline engine rebuilding.
 ## Credits and rights
 
 Original game © SEGA. Characters © SEGA/AUTOMUSS.
-Character design: KATOKI HAJIME.
+Character design: Hajime Katoki.
 
 This is an unofficial community project with no SEGA affiliation or endorsement.
 Software licenses do not grant rights to SEGA's game programs, artwork, logos,

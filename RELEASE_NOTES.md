@@ -38,7 +38,7 @@ select their own ROMs locally; the website does not upload them. The precompiled
 WebAssembly engine does contain ROM-derived translated game instructions.
 Requiring a ROM does not grant distribution rights to those instructions.
 
-Original game © SEGA. Characters © SEGA/AUTOMUSS. Character design: KATOKI HAJIME.
+Original game © SEGA. Characters © SEGA/AUTOMUSS. Character design: Hajime Katoki.
 This project is unofficial and has no SEGA affiliation or endorsement. Software
 licenses do not relicense SEGA's game code or assets. See NOTICE.md and the
 included software attribution and license files.
