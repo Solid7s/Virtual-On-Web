@@ -10,9 +10,7 @@ ahead of time into compiled WebAssembly. An independent Model 2 runtime handles
 the hardware, graphics, sound, and input, with WebGPU displaying the game.
 
 This is a **recompilation (recomp) port**, not a decompilation project. It does
-not recover SEGA's original source code. The shipped standalone player does not
-link the MAME emulator framework or a CPU interpreter, but its hardware and
-instruction semantics incorporate credited MAME and Daytona recompilation code.
+not recover SEGA's original source code. 
 
 ## Play
 
