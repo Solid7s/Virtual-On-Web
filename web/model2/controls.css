@@ -1,0 +1,38 @@
+/* Guide and touch layout adapted from the original Daytona USA Web stylesheet. */
+.controls-guide{padding:20px 4px 8px;margin:20px 0;color:#c9c9c4}
+.guide-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;margin:18px 0}
+.guide-columns h2{margin:0 0 12px;color:#fff;font-size:14px;font-style:italic;text-transform:uppercase}
+.guide-columns dl{display:grid;gap:10px;margin:0}
+.guide-columns dl>div{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px}
+.guide-columns dt{color:#bababa;min-width:0}
+.guide-columns dd{margin:0;color:#eee;text-align:right;flex-shrink:0;max-width:60%}
+.guide-columns p{font-size:13px;margin:0;line-height:1.7}
+.controls-guide kbd{display:inline-block;min-width:20px;padding:2px 5px;border:1px solid #9a9a95;border-radius:2px;background:linear-gradient(#eee,#ccc);color:#171717;font:bold 11px/1.5 Arial,sans-serif;text-align:center;box-shadow:0 1px 0 #555}
+.touch-guide,.service-note{border-top:1px solid #ffffff25;padding-top:13px;font-size:12px;line-height:1.7;color:#c9c9c4}
+.service-note{display:flex;align-items:flex-start;gap:12px;margin:14px 0 0}
+.service-note>kbd{padding:4px 7px;background:#ffe12e;border-color:#fff0a4;flex-shrink:0}
+.guide-footer{text-align:center;font-size:12px;color:#a8a8a3;margin:14px 0 0;line-height:1.8}
+@media(max-width:700px){.guide-columns{grid-template-columns:minmax(0,1fr);gap:24px}.guide-columns dl{gap:10px}}
+
+.driver-touch,.driver-touch *{box-sizing:border-box}
+.driver-touch{position:absolute;inset:0;z-index:4;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.driver-touch.native-menu-open{visibility:hidden}
+.driver-touch button,.driver-touch .steering-pad{pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent}
+.driver-touch button{min-width:44px;min-height:44px;padding:9px 12px;color:#fff;background:#111b;border:1px solid #ffffff60;border-radius:10px;font-weight:800;font-size:10px;opacity:.75}
+.driver-touch button.pressed,.driver-touch button:active{opacity:1;background:#ffe12ec7;color:#111;border-color:#ffe12e}
+.driver-touch button:focus-visible{outline:2px solid #ffe12e;outline-offset:3px}
+.touch-top{position:absolute;top:max(12px,env(safe-area-inset-top));left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));display:flex;justify-content:space-between;gap:12px}
+.touch-top [data-menu]{font-size:18px}
+.touch-actions{display:flex;gap:6px}
+.touch-service{position:absolute;right:max(14px,env(safe-area-inset-right));top:68px;display:flex;gap:5px;flex-wrap:wrap;max-width:min(300px,calc(100% - 28px))}
+.steering-pad{position:absolute;bottom:max(22px,env(safe-area-inset-bottom));left:max(18px,env(safe-area-inset-left));width:148px;height:74px;display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid #ffffff60;border-radius:38px;background:#1119;color:#fffb;font-size:32px}
+.steering-knob{display:grid;place-items:center;width:48px;height:48px;flex-shrink:0;border-radius:50%;font-size:22px;background:#ffffff25;border:1px solid #ffffff40;color:#ffed79;will-change:transform}
+.touch-pedals{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));display:flex;align-items:flex-end;gap:9px}
+.touch-pedals button[data-action=gas]{width:74px;height:84px;border-radius:25px 25px 12px 12px;border-color:#ffe12e66;color:#ffe979}
+.touch-pedals button[data-action=brake]{width:62px;height:62px}
+.touch-gears{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:120px;display:flex;align-items:center;gap:8px;color:#fff;font:bold 12px Arial}
+.touch-gears button{min-width:44px;font-size:21px;padding:6px}
+.rotate-hint{display:none;position:absolute;bottom:185px;left:0;right:0;text-align:center;color:#ffffffa0;font-size:10px;pointer-events:none;text-shadow:0 1px 3px #000}
+@media(max-width:600px) and (orientation:portrait){.rotate-hint{display:block}}
+@media(max-width:360px){.steering-pad{width:112px;left:12px;padding:8px}.touch-pedals,.touch-gears{right:12px}.touch-pedals{gap:8px}.touch-pedals button[data-action=gas]{width:64px}.touch-pedals button[data-action=brake]{width:52px}.touch-top{left:10px;right:10px;gap:6px}.touch-actions{gap:4px}}
+@media(orientation:landscape) and (max-height:500px){.steering-pad{bottom:max(14px,env(safe-area-inset-bottom));height:68px}.touch-pedals{bottom:max(14px,env(safe-area-inset-bottom))}.touch-pedals button[data-action=gas]{height:76px}.touch-gears{bottom:106px}}

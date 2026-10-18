@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual-On</title><style>
+html,body{margin:0;height:100%;background:#000;color:#dce8f5;font:14px system-ui;overflow:hidden}body{display:flex;flex-direction:column}
+#display{position:relative;flex:1;min-height:0}canvas{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);outline:none}
+.game-actions{position:absolute;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));z-index:2;display:flex;gap:4px;pointer-events:none}
+.game-actions button{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:5px;background:transparent;color:#fff;cursor:pointer;pointer-events:auto;touch-action:manipulation}
+@media(hover:hover){.game-actions button:not(:disabled):hover{background:#006d73e8;border-color:#8cf3eb}.game-actions #quitGame:not(:disabled):hover{background:#9d2538e8;border-color:#ffa0ae}}
+.game-actions button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.game-actions button:disabled{opacity:.5;cursor:default}
+.game-actions svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px #000c);pointer-events:none}
+[hidden]{display:none!important}
+</style></head><body>
+<div id="display">
+  <div class="game-actions" role="group" aria-label="Game actions">
+    <button id="quitGame" type="button" aria-label="Quit game" title="Quit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    <button id="toggleFullscreen" type="button" aria-label="Enter fullscreen" aria-pressed="false" title="Enter fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button>
+  </div>
+  <canvas id="screen" tabindex="0" aria-label="Virtual-On game"></canvas>
+</div>
+<script type="module" src="virtual-on-player.js"></script></body></html>

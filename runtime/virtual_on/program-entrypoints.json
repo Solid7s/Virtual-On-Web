@@ -1,0 +1,7 @@
+{
+  "m68000": ["602bb8", "603848"],
+  "notes": {
+    "602bb8": "Sound command reached during the second fight; relative jump table entry at 602a78.",
+    "603848": "Sound RAM cleanup reached by the match-result command in both USA and Japan; discover the full function from verified sound ROM."
+  }
+}

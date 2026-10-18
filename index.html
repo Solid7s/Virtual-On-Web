@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-app="virtual-on">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual-On-Web — WebGPU Recompilation Port</title><link rel="stylesheet" href="web/model2/style.css"><link rel="stylesheet" href="web/model2/controls.css"><link rel="stylesheet" href="web/model2/virtual-on.css"></head>
+<body><main>
+  <header class="brand">
+    <img src="web/model2/assets/virtual-on-logo.jpg" alt="Cyber Troopers Virtual-On" width="640" height="307" fetchpriority="high">
+  </header>
+  <section class="card" aria-label="Launch Virtual-On">
+    <fieldset id="selection">
+      <label for="roms">Choose Virtual-On ROM files</label>
+      <input id="roms" type="file" accept=".zip,application/zip" multiple aria-describedby="romDetection">
+      <p id="romDetection" role="status" aria-live="polite" hidden></p>
+      <div class="graphics-label" id="graphicsLabel">Graphics mode</div>
+      <div class="display-mode" role="radiogroup" aria-labelledby="graphicsLabel" aria-describedby="graphicsDescription">
+        <button id="classicMode" type="button" role="radio" aria-checked="false" tabindex="-1" data-mode="classic">Classic</button>
+        <button id="enhancedMode" type="button" role="radio" aria-checked="true" tabindex="0" data-mode="enhanced">Enhanced</button>
+        <button id="enhancedPlusMode" type="button" role="radio" aria-checked="false" tabindex="-1" data-mode="enhanced-plus">Enhanced+</button>
+      </div>
+      <p id="graphicsDescription" aria-live="polite" aria-atomic="true">Higher-resolution graphics with the original 4:3 view.</p>
+    </fieldset>
+    <button id="launch" disabled>Launch Virtual-On</button>
+    <p id="status" role="status" aria-live="polite" hidden></p>
+  </section>
+  <section id="session" aria-label="Arcade session" hidden>
+    <div class="row"><button id="stop" class="secondary" disabled>Quit</button><button id="fullscreen" class="secondary">Fullscreen</button></div>
+    <iframe id="runner" title="Virtual-On game" allow="autoplay; fullscreen; gamepad" src="about:blank"></iframe>
+  </section>
+  <section id="controlsGuide" class="controls-guide" aria-label="Game controls">
+    <div id="controls"></div>
+  </section>
+  <footer class="copyright-notice" aria-label="Copyright and credits">
+    <p>© SEGA. Characters © SEGA/AUTOMUSS. Character design: KATOKI HAJIME.</p>
+    <p>Unofficial community project. Not affiliated with or endorsed by SEGA.</p>
+    <p><a href="NOTICE.md">Copyright notice</a> · <a href="runtime/virtual_on/THIRD_PARTY.md">Software credits &amp; licenses</a></p>
+  </footer>
+  <pre id="log" hidden></pre>
+</main><script type="module" src="web/model2/launcher.js"></script></body></html>
