@@ -57,6 +57,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForFunction(() => document.querySelector('#runner').contentWindow?.virtualOn
       || /failed|missing|unsupported|error/i.test(document.querySelector('#status').textContent), null, { timeout: 120000 });
     const frame = page.frames().find(f => f.url().includes('/virtual-on-player.html'));
+    const showGameActions = () => page.frameLocator('#runner').locator('#screen').hover();
     assert.ok(await frame.evaluate(() => !!window.virtualOn), await page.locator('#log').textContent());
     const assertBrowserLayout = async () => {
       assert.deepEqual(await page.locator('#runner').boundingBox(), { x: 0, y: 0, ...page.viewportSize() },
@@ -174,6 +175,7 @@ fs.mkdirSync(out, { recursive: true });
       }
     }
     if (process.env.TEST_REALTIME_SECONDS) {
+      await showGameActions();
       await frame.locator('#toggleFullscreen').click();
       await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#runner')
         && !document.querySelector('#runner').contentDocument.querySelector('footer'));
@@ -203,6 +205,7 @@ fs.mkdirSync(out, { recursive: true });
     const saved = await page.evaluate(game => localStorage.getItem(`model2-enhanced-v3-standalone-${game}-nvram-v1`), game);
     assert.equal(Buffer.from(saved, 'base64').length, 0x4080);
     const square = frame.locator('#toggleFullscreen');
+    await showGameActions();
     assert.equal(await frame.locator('#quitGame').isVisible(), true);
     assert.equal(await square.isVisible(), true);
     await frame.locator('#display').screenshot({ path: path.join(out, 'toolbar-windowed.png') });
@@ -244,6 +247,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(Buffer.from(quitSave, 'base64').length, 0x4080, 'The X button must save arcade settings');
     await page.click('#launch');
     await page.waitForFunction(() => document.querySelector('#runner').contentWindow?.virtualOn, null, { timeout: 120000 });
+    await showGameActions();
     await page.frameLocator('#runner').locator('#quitGame').click();
     await page.waitForFunction(() => document.querySelector('#session').hidden);
     assert.equal(await page.isDisabled('#launch'), false, 'Quit must still work after relaunch');

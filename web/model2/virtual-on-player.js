@@ -2,6 +2,7 @@ import { createGeneralRenderer } from './gpu-renderer.js';
 import { TwinStickState } from './twin-stick.js';
 import { importVirtualOn } from './virtual-on-roms.js';
 const canvas = document.querySelector('#screen');
+const display = document.querySelector('#display'), gameActions = document.querySelector('.game-actions');
 const quitButton = document.querySelector('#quitGame'), fullscreenButton = document.querySelector('#toggleFullscreen');
 const send = (type, detail = '') => parent.postMessage({ scope: 'model2', type, detail }, location.origin);
 const report = text => send('status', text);
@@ -85,8 +86,22 @@ window.addEventListener('keydown', event => {
 window.addEventListener('keyup', event => {
   if (held.key(event.code, false) && !event.target.closest?.('button')) event.preventDefault();
 });
-window.addEventListener('blur', () => held.clear());
-document.querySelector('.game-actions').addEventListener('focusin', () => held.clear());
+let actionsTimer;
+function hideGameActions() {
+  clearTimeout(actionsTimer);
+  gameActions.classList.remove('is-visible');
+}
+function showGameActions() {
+  clearTimeout(actionsTimer);
+  gameActions.classList.add('is-visible');
+  actionsTimer = setTimeout(hideGameActions, 2000);
+}
+display.addEventListener('pointermove', event => { if (event.pointerType !== 'touch') showGameActions(); }, { passive: true });
+// Reveal touch controls after the tap so it cannot also activate a hidden button.
+display.addEventListener('click', showGameActions);
+display.addEventListener('pointerleave', event => { if (event.pointerType !== 'touch') hideGameActions(); });
+window.addEventListener('blur', () => { held.clear(); hideGameActions(); });
+gameActions.addEventListener('focusin', () => held.clear());
 quitButton.addEventListener('click', () => { quitButton.disabled = true; send('quit'); });
 fullscreenButton.addEventListener('click', () => send('toggle-fullscreen'));
 canvas.addEventListener('pointerdown', () => { canvas.focus(); if (running) void audio?.resume(); });

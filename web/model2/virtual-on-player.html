@@ -3,9 +3,12 @@
 <title>Virtual-On</title><style>
 html,body{margin:0;height:100%;background:#000;color:#dce8f5;font:14px system-ui;overflow:hidden}body{display:flex;flex-direction:column}
 #display{position:relative;flex:1;min-height:0}canvas{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);outline:none}
-.game-actions{position:absolute;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));z-index:2;display:flex;gap:4px;pointer-events:none}
-.game-actions button{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:5px;background:transparent;color:#fff;cursor:pointer;pointer-events:auto;touch-action:manipulation}
-@media(hover:hover){.game-actions button:not(:disabled):hover{background:#006d73e8;border-color:#8cf3eb}.game-actions #quitGame:not(:disabled):hover{background:#9d2538e8;border-color:#ffa0ae}}
+.game-actions{position:absolute;top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));z-index:2;display:flex;gap:4px;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.game-actions button{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:5px;background:transparent;color:#fff;cursor:pointer;pointer-events:none;touch-action:manipulation}
+.game-actions.is-visible,.game-actions:focus-within{opacity:1}
+.game-actions.is-visible button,.game-actions:focus-within button{pointer-events:auto}
+@media(hover:hover){.game-actions:hover{opacity:1}.game-actions:hover button{pointer-events:auto}.game-actions button:not(:disabled):hover{background:#006d73e8;border-color:#8cf3eb}.game-actions #quitGame:not(:disabled):hover{background:#9d2538e8;border-color:#ffa0ae}}
+@media(prefers-reduced-motion:reduce){.game-actions{transition:none}}
 .game-actions button:focus-visible{outline:2px solid #fff;outline-offset:3px}
 .game-actions button:disabled{opacity:.5;cursor:default}
 .game-actions svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px #000c);pointer-events:none}
