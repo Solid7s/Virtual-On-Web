@@ -58,6 +58,16 @@ fs.mkdirSync(out, { recursive: true });
       || /failed|missing|unsupported|error/i.test(document.querySelector('#status').textContent), null, { timeout: 120000 });
     const frame = page.frames().find(f => f.url().includes('/virtual-on-player.html'));
     assert.ok(await frame.evaluate(() => !!window.virtualOn), await page.locator('#log').textContent());
+    const assertBrowserLayout = async () => {
+      assert.deepEqual(await page.locator('#runner').boundingBox(), { x: 0, y: 0, ...page.viewportSize() },
+        'The game must fill the browser viewport');
+      assert.equal(await page.locator('.brand').isVisible(), false);
+      assert.equal(await page.locator('#controlsGuide').isVisible(), false);
+      assert.equal(await page.locator('.copyright-notice').isVisible(), false);
+      assert.equal(await page.locator('#fullscreen').isVisible(), false, 'Use the in-game toolbar while playing');
+    };
+    await assertBrowserLayout();
+    assert.equal(await page.evaluate(() => document.fullscreenElement), null, 'Launch must stay inside the browser window');
     await frame.locator('#screen').focus();
     for (const [key, port, mask] of [['KeyW', 'IN1', 32], ['KeyA', 'IN1', 128], ['KeyS', 'IN1', 16], ['KeyD', 'IN1', 64],
       ['KeyP', 'IN2', 32], ['KeyL', 'IN2', 128], ['Semicolon', 'IN2', 16], ['Quote', 'IN2', 64],
@@ -164,7 +174,7 @@ fs.mkdirSync(out, { recursive: true });
       }
     }
     if (process.env.TEST_REALTIME_SECONDS) {
-      await page.click('#fullscreen');
+      await frame.locator('#toggleFullscreen').click();
       await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#runner')
         && !document.querySelector('#runner').contentDocument.querySelector('footer'));
       assert.equal(await frame.locator('footer').count(), 0, 'The game must have no status bar');
@@ -208,6 +218,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForFunction(() => !document.fullscreenElement);
     await frame.waitForFunction(() => document.querySelector('#toggleFullscreen').getAttribute('aria-pressed') === 'false');
     assert.equal(await frame.locator('footer').count(), 0, 'Leaving fullscreen must not restore a status bar');
+    await assertBrowserLayout();
     // Shift+Tab reaches the toolbar from the game; Space activates the button
     // instead of sending a dash input to the arcade hardware.
     await frame.locator('#screen').focus();
@@ -218,7 +229,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.deepEqual(await frame.evaluate(() => virtualOn.held.read(null).filter(field => field[2])), []);
     await square.click();
     await page.waitForFunction(() => !document.fullscreenElement);
-    await page.click('#fullscreen');
+    await square.click();
     await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#runner'));
     await frame.waitForFunction(() => document.querySelector('#toggleFullscreen').getAttribute('aria-pressed') === 'true');
     await page.evaluate(game => localStorage.removeItem(`model2-enhanced-v3-standalone-${game}-nvram-v1`), game);
@@ -226,13 +237,16 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForFunction(() => document.querySelector('#session').hidden);
     assert.equal(await page.evaluate(() => document.fullscreenElement === null), true, 'Quit must leave fullscreen');
     assert.equal(await page.isDisabled('#launch'), false, 'Quit must make the launcher usable again');
+    assert.equal(await page.locator('.brand').isVisible(), true);
+    assert.equal(await page.locator('#controlsGuide').isVisible(), true);
+    assert.equal(await page.locator('.copyright-notice').isVisible(), true);
     const quitSave = await page.evaluate(game => localStorage.getItem(`model2-enhanced-v3-standalone-${game}-nvram-v1`), game);
     assert.equal(Buffer.from(quitSave, 'base64').length, 0x4080, 'The X button must save arcade settings');
     await page.click('#launch');
     await page.waitForFunction(() => document.querySelector('#runner').contentWindow?.virtualOn, null, { timeout: 120000 });
-    await page.click('#stop');
+    await page.frameLocator('#runner').locator('#quitGame').click();
     await page.waitForFunction(() => document.querySelector('#session').hidden);
-    assert.equal(await page.isDisabled('#launch'), false, 'The outer Quit button must still work after relaunch');
+    assert.equal(await page.isDisabled('#launch'), false, 'Quit must still work after relaunch');
     assert.deepEqual(errors, []);
     passed = true;
     console.log(JSON.stringify(records));
