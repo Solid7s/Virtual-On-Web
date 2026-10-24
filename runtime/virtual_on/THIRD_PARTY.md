@@ -28,7 +28,11 @@ geometry command ports adapt `m2_tgp_board.cpp`, which credits the same MAME
 Model 2 authors above. Generated copies retain the source notices.
 The player also uses pinned `video.cpp`, `video.h`, `raster.cpp`, `raster.h`,
 `raster_texel.h` and `video_profile.h`. The generator disables the Vita/GXM
-tile-composition shortcut so the browser receives complete CPU tile layers.
+shortcut for the CPU reference compositor. The browser's
+`web/model2/system24.wgsl` adapts the same System 24 tile decoding, palette,
+scroll, split-window and mask rules to a WebGPU compute pass. Its RAM and
+palette inputs are captured at vblank; the CPU compositor remains available
+for differential testing.
 
 Daytona project copyright: Copyright (c) 2026, Ben Templeman and contributors.
 Its BSD-3-Clause terms are the same three conditions and disclaimer reproduced

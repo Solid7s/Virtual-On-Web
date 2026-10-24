@@ -33,8 +33,9 @@ struct SoundIrq {
 };
 struct SoundTimer {
     uint64_t &now;
+    uint64_t &next_event;
     uint64_t due = UINT64_MAX;
-    void adjust(uint64_t ticks) { due = now + ticks; }
+    void adjust(uint64_t ticks) { due = now + ticks; next_event = std::min(next_event, due); }
 };
 struct SoundStream {
     float output[2]{};

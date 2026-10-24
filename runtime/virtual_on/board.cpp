@@ -59,12 +59,21 @@ Board::Board(std::vector<uint8_t> program, std::vector<uint8_t> data) {
     auto tex1 = add(0x11200000, 0x100000); alias(0x11300000, 0x100000, tex1);
     add(0x11600000, 0x80000); add(0x11680000, 0x80000);
     std::sort(regions_.begin(), regions_.end(), [](const auto &a, const auto &b) { return a.base < b.base; });
+    memory_generations_.resize(memory_.size());
+    if (regions_.size() > 255) throw std::runtime_error("Too many board regions");
+    for (size_t i = 0; i < regions_.size(); ++i) {
+        const auto &r = regions_[i];
+        for (uint32_t page = r.base >> 16; page <= (r.base + r.size - 1) >> 16; ++page) {
+            if (region_pages_[page]) throw std::runtime_error("Overlapping board pages");
+            region_pages_[page] = uint8_t(i + 1);
+        }
+    }
 }
 const Board::Region *Board::region(uint32_t a) const {
-    auto it = std::upper_bound(regions_.begin(), regions_.end(), a,
-        [](uint32_t a, const Region &r) { return a < r.base; });
-    if (it == regions_.begin()) return nullptr;
-    --it; return a - it->base < it->size ? &*it : nullptr;
+    const auto id = region_pages_[a >> 16];
+    if (!id) return nullptr;
+    const auto &r = regions_[id - 1];
+    return a - r.base < r.size ? &r : nullptr;
 }
 uint16_t Board::flags(uint32_t a) const {
     if (auto r = region(a)) return r->burst;
@@ -76,6 +85,11 @@ const uint8_t *Board::memory(uint32_t address) const {
     auto r = region(address);
     if (!r) throw std::runtime_error("No memory at requested address");
     return memory_[r->storage].data() + r->offset + address - r->base;
+}
+uint64_t Board::memory_generation(uint32_t address) const {
+    auto r = region(address);
+    if (!r) throw std::runtime_error("No memory at requested address");
+    return memory_generations_[r->storage];
 }
 uint32_t Board::read(uint32_t a, unsigned n) {
     if (a >= 0x900000 && a < 0x980000 && sync_buffer) sync_buffer();
@@ -96,6 +110,7 @@ void Board::write(uint32_t a, uint32_t v, unsigned n) {
         if (journal) writes.push_back({a, v, n == 4 ? ~0u : (1u << (n*8)) - 1});
         auto &bytes = memory_[r->storage];
         for (unsigned i = 0; i < n; ++i) bytes[r->offset + a - r->base + i] = uint8_t(v >> (i*8));
+        ++memory_generations_[r->storage];
         return;
     }
     if ((a & 3) + n > 4) { for (unsigned i = 0; i < n; ++i) write_byte(a+i, uint8_t(v >> (i*8))); return; }

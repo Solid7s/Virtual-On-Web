@@ -204,8 +204,57 @@ def prepare_scsp():
     dsp_source = original('src/devices/sound/scspdsp.cpp')
     dsp_fields = dsp_header[dsp_header.index('struct SCSPDSP'):dsp_header.index('#endif')]
     dsp_fields = dsp_fields.replace('address_space *space', 'SoundRam *space')
-    write('sound_dsp.h', NOTICE + '#pragma once\n#include "sound_support.h"\nnamespace von {\n' + dsp_fields + '\n}\n')
     dsp_source = dsp_source[dsp_source.index('namespace {'):].replace('util::sext', 'sext')
+    # Decode immutable instruction fields when program RAM changes, rather than
+    # at every 44.1 kHz sample. Coefficients, address tables and all DSP state
+    # remain live. Each word write invalidates its instruction immediately;
+    # the pinned Start() behavior (including LastStep) is unchanged.
+    decode_start = dsp_source.index('\t\tu32 const TRA ')
+    decode_end = dsp_source.index('\n\t\t//operations are done at 24 bit precision', decode_start)
+    decode = dsp_source[decode_start:decode_end]
+    decoded = re.findall(r'u32 const (\w+)\s*=\s*([^;]+);', decode)
+    assert len(decoded) == 25, 'Pinned SCSP DSP decode layout changed'
+    fields_decl = ', '.join(name for name, _ in decoded)
+    dsp_fields = dsp_fields.replace('\tvoid Init();', '''
+#ifdef VON_DSP_CACHE
+    struct Decoded { uint8_t ''' + fields_decl + '''; };
+    Decoded decoded[128];
+    bool decoded_valid[128];
+    bool decoded_dirty;
+    uint64_t executed_samples, decoded_instructions;
+    void Decode(unsigned index);
+#endif
+#ifdef VON_DSP_TEST
+    void StepReference();
+#endif
+    void WriteProgram(unsigned word, u16 value) {
+        MPRO[word] = value;
+#ifdef VON_DSP_CACHE
+        decoded_valid[word / 4] = false;
+        decoded_dirty = true;
+#endif
+    }
+\tvoid Init();''')
+    write('sound_dsp.h', NOTICE + '#pragma once\n#include "sound_support.h"\nnamespace von {\n' + dsp_fields + '\n}\n')
+    reference = 'void SCSPDSP::StepReference() {\n' + body_of(dsp_source, 'void SCSPDSP::Step()') + '\n}\n'
+    cached = '\n'.join(f'\t\tu32 const {name} = decoded[step].{name};' for name, _ in decoded)
+    dsp_source = dsp_source[:decode_start] + '#ifdef VON_DSP_CACHE\n' + cached + '\n#else\n' + decode + '\n#endif\n' + dsp_source[decode_end:]
+    dsp_source = dsp_source.replace('\tstd::fill(std::begin(EFREG), std::end(EFREG), 0);', '''#ifdef VON_DSP_CACHE
+    ++executed_samples;
+    if (decoded_dirty) {
+        for (int step = 0; step < LastStep; ++step) if (!decoded_valid[step]) Decode(step);
+        decoded_dirty = false;
+    }
+#endif
+\tstd::fill(std::begin(EFREG), std::end(EFREG), 0);''', 1)
+    dsp_source += '\n#ifdef VON_DSP_CACHE\nvoid SCSPDSP::Decode(unsigned index) {\n    const auto *IPtr = MPRO + index * 4;\n'
+    dsp_source += '\n'.join(f'    decoded[index].{name} = {expr};' for name, expr in decoded)
+    dsp_source += '\n    decoded_valid[index] = true; ++decoded_instructions;\n}\n#endif\n'
+    dsp_source += '\n#ifdef VON_DSP_TEST\n' + reference + '#endif\n'
+    dsp_source = dsp_source.replace('\tStopped = false;', '''\tStopped = false;
+#ifdef VON_DSP_CACHE
+    decoded_dirty = true;
+#endif''')
     write('sound_dsp.cpp', NOTICE + '#include "sound_dsp.h"\nnamespace von {\n' + dsp_source + '\n}\n')
     fields = header[header.index('\tenum SCSP_STATE'):header.index('\n};')]
     fields = re.sub(r'^\tdevcb_.*\n', '', fields, flags=re.M)
@@ -224,9 +273,9 @@ namespace von {
 class SoundChip {
 public:
     SoundRam &ram;
-    uint64_t now = 0, next_sample = 512, midi_due = UINT64_MAX;
+    uint64_t now = 0, next_sample = 512, midi_due = UINT64_MAX, next_event = 0;
     uint32_t random_state = 0x31415926;
-    SoundTimer timers[3]{{now},{now},{now}};
+    SoundTimer timers[3]{{now,next_event},{now,next_event},{now,next_event}};
     SoundIrq m_irq_cb;
     std::function<void(uint8_t)> midi_out;
     float gain[2]{};
@@ -238,13 +287,22 @@ public:
     uint32_t random() { random_state ^= random_state << 13; random_state ^= random_state >> 17; return random_state ^= random_state << 5; }
     void set_output_gain(unsigned n, double value) { gain[n] = float(value); }
     void m_main_irq_cb(int) {}
-    void transmit_register_setup(uint8_t) { midi_due = now + (22579200ull * 10 + 31249) / 31250; }
+    void transmit_register_setup(uint8_t) {
+        midi_due = now + (22579200ull * 10 + 31249) / 31250;
+        next_event = std::min(next_event, midi_due);
+    }
     void receive(uint8_t value) { m_MidiStack[m_MidiW++ & 31] = value; m_MidiW &= 31; CheckPendingIRQ(); }
     uint16_t read(unsigned offset) { return r16(offset*2); }
     void write(unsigned offset, uint16_t value, uint16_t mask = 0xffff) {
         const auto old = r16(offset*2); w16(offset*2, (old & ~mask) | (value & mask));
     }
-    void advance(uint64_t target);
+    // Most CPU bus synchronizations occur before the next sample/timer/MIDI
+    // deadline. Scheduling an earlier event lowers this conservative bound.
+    void advance(uint64_t target) {
+        if (target < next_event) { now = target; return; }
+        advance_events(target);
+    }
+    void advance_events(uint64_t target);
     void tra_complete();
     void sound_stream_update(SoundStream &stream);
 ''' + fields + '\n};\n}\n')
@@ -256,6 +314,9 @@ public:
     chip = chip.replace('scsp_device::', 'SoundChip::').replace('sound_stream', 'SoundStream').replace('(offs_t)', '(uint32_t)')
     chip = re.sub(r'TIMER_CALLBACK_MEMBER\(SoundChip::(\w+)\)', r'void SoundChip::\1()', chip)
     chip = chip.replace('m_DSP.space = &this->space();', 'm_DSP.space = &ram;')
+    program_write = '*((uint16_t *) (m_DSP.MPRO + (addr - 0x800) / 2)) = val;'
+    assert program_write in chip, 'Pinned SCSP program write changed'
+    chip = chip.replace(program_write, 'm_DSP.WriteProgram((addr - 0x800) / 2, val);')
     chip = re.sub(r'\tm_timer[ABC] = timer_alloc\([^;]+;\n', '', chip)
     chip = chip.replace('attotime::from_ticks(512, time)', '(512ull * clock() + time - 1) / time')
     chip = chip.replace('this->space().write_word', 'ram.write_word')
@@ -263,11 +324,11 @@ public:
     stream_update = 'void SoundChip::sound_stream_update(SoundStream &stream) {\n' + body_of(source, 'void scsp_device::sound_stream_update(sound_stream &stream)') + '\n}\n'
     tx = 'void SoundChip::tra_complete() {\n' + body_of(source, 'void scsp_device::tra_complete()') + '\n}\n'
     write('sound_chip.cpp', NOTICE + '#include "sound_chip.h"\nnamespace von {\n' + constants + chip + stream_update + tx + '''
-    void SoundChip::advance(uint64_t target) {
+    void SoundChip::advance_events(uint64_t target) {
         for (;;) {
             uint64_t next = std::min(next_sample, midi_due);
             for (auto &timer : timers) next = std::min(next, timer.due);
-            if (next > target) break;
+            if (next > target) { next_event = next; break; }
             now = next;
             if (midi_due == now) {
                 midi_due = UINT64_MAX;

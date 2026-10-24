@@ -17,7 +17,7 @@ const artifacts = JSON.parse(fs.readFileSync(path.join(root, `build/v3-standalon
 fs.mkdirSync(out, { recursive: true });
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true,
-    args: ['--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'] });
+    args: ['--autoplay-policy=no-user-gesture-required'] });
   const records = [], errors = [], requests = [], scenes = [];
   let page, passed = false;
   try {
@@ -59,6 +59,8 @@ fs.mkdirSync(out, { recursive: true });
     const frame = page.frames().find(f => f.url().includes('/virtual-on-player.html'));
     const showGameActions = () => page.frameLocator('#runner').locator('#screen').hover();
     assert.ok(await frame.evaluate(() => !!window.virtualOn), await page.locator('#log').textContent());
+    if (process.env.TEST_PROJECTION !== undefined)
+      await frame.evaluate(mode => Module._von_gpu_projection(Number(mode)), process.env.TEST_PROJECTION);
     const assertBrowserLayout = async () => {
       assert.deepEqual(await page.locator('#runner').boundingBox(), { x: 0, y: 0, ...page.viewportSize() },
         'The game must fill the browser viewport');
@@ -95,11 +97,16 @@ fs.mkdirSync(out, { recursive: true });
     };
     const shot = async name => {
       await frame.locator('#screen').screenshot({ path: path.join(out, name + '.png') });
-      records.push(await frame.evaluate(name => ({ name, frames: Module._von_frames(), polygons: Module._von_polygons(),
+      records.push(await frame.evaluate(async name => ({ name, frames: Module._von_frames(), polygons: Module._von_polygons(),
         scene: [Module._von_peek(0x5039f4), Module._von_peek(0x503a00)], audioPeak: Module._von_audio_peak(),
-        foregroundPixels: (() => { const packet = new Uint32Array(Module.HEAPU8.buffer, Module._von_packet(), 24);
-          return new Uint32Array(Module.HEAPU8.buffer, packet[8], 496*384).reduce((n, p) => n + Number(p !== 0), 0); })(),
-        audioFrames: Module._von_audio_total(), soundCommands: Module._von_sound_commands(), gpu: { ...virtualOn.renderer.stats } }), name));
+        foregroundPixels: await (async () => {
+          const [, front] = await virtualOn.renderer.readLayers();
+          return new Uint32Array(front.buffer).reduce((n, p) => n + Number(p !== 0), 0);
+        })(),
+        audioFrames: Module._von_audio_total(), audioHashedFrames: Module._von_audio_hashed_frames?.() ?? null,
+        soundCommands: Module._von_sound_commands(), gpu: { ...virtualOn.renderer.stats } }), name));
+      if (records.at(-1).audioHashedFrames !== null)
+        assert.equal(records.at(-1).audioHashedFrames, 0, 'Normal gameplay must skip diagnostic checksums');
     };
     const pulse = async key => {
       await frame.locator('#screen').focus(); await page.keyboard.down(key); await advance(18);

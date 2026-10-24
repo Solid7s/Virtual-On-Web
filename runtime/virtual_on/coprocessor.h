@@ -73,6 +73,11 @@ public:
             if (need_output && !output.empty()) return;
             if (cpu.waiting_for_input()) { ++yields; return; }
             if (output.size() == 16) return;
+#ifdef VON_SHARC_MATH
+            if (!oracle && !instruction_hook && cpu.m_core->daddr == 0x20dd8) {
+                if (const auto count = cpu.run_polynomial()) { budget += count - 1; continue; }
+            }
+#endif
             cpu.step(oracle);
             if (instruction_hook) instruction_hook(cpu);
         }

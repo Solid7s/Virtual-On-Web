@@ -1,3 +1,4 @@
+import { createGameAudio } from './game-audio.js';
 import { createGeneralRenderer } from './gpu-renderer.js';
 import { TwinStickState } from './twin-stick.js';
 import { importVirtualOn } from './virtual-on-roms.js';
@@ -9,8 +10,7 @@ const report = text => send('status', text);
 const held = new TwinStickState();
 const base = new URL('../../build/v3-standalone/', import.meta.url);
 let Module, renderer, running = false, started = false, request, last = 0, lag = 0, statTime = 0, statFrames = 0;
-let audio, audioNext = 0, storageKey, autoPaused = false, saveTime = 0;
-const audioSources = new Set();
+let audio, storageKey, autoPaused = false, saveTime = 0;
 const frameMS = 1000 * 656 * 424 / 16000000;
 let manual = new URLSearchParams(location.search).has('manual');
 function save() {
@@ -21,8 +21,7 @@ function save() {
   } catch (err) { send('log', `Arcade settings could not be saved: ${err.message}`); }
 }
 function pause() {
-  running = false; cancelAnimationFrame(request); held.clear(); audioNext = 0;
-  for (const source of audioSources) source.stop(); audioSources.clear();
+  running = false; cancelAnimationFrame(request); held.clear();
   void audio?.suspend(); save();
 }
 function resume() {
@@ -42,18 +41,9 @@ function advance(count = 1) {
   for (let i = 0; i < count; ++i) {
     input();
     if (!Module._von_frame()) throw Error(Module.UTF8ToString(Module._von_error()));
-    if (!manual && audio?.state === 'running') {
+    if (!manual && audio?.context.state === 'running') {
       const frames = Module._von_audio_count(), pointer = Module._von_audio();
-      const samples = Module.HEAPF32.subarray(pointer/4, pointer/4 + frames*2);
-      const buffer = audio.createBuffer(2, frames, 44100);
-      for (let c = 0; c < 2; ++c) {
-        const target = buffer.getChannelData(c);
-        for (let n = 0; n < frames; ++n) target[n] = samples[n*2+c];
-      }
-      const source = audio.createBufferSource(); source.buffer = buffer; source.connect(audio.destination);
-      audioSources.add(source); source.onended = () => { audioSources.delete(source); source.disconnect(); };
-      if (audioNext < audio.currentTime || audioNext > audio.currentTime + .3) audioNext = audio.currentTime + .04;
-      source.start(audioNext); audioNext += frames/44100;
+      audio.push(Module.HEAPF32.subarray(pointer/4, pointer/4 + frames*2));
     }
   }
   renderer.draw(Module, Module._von_packet());
@@ -80,7 +70,7 @@ window.addEventListener('keydown', event => {
   if (event.code === 'Tab' && !event.shiftKey && Module) {
     event.preventDefault(); if (!event.repeat) running ? pause() : resume(); return;
   }
-  if (running && audio?.state === 'suspended') void audio.resume();
+  if (running && audio?.context.state === 'suspended') void audio.resume();
   if (held.key(event.code, true)) event.preventDefault();
 });
 window.addEventListener('keyup', event => {
@@ -138,13 +128,14 @@ async function boot({ game, archives, displayMode = 'enhanced' }) {
     if (!Module.ccall('von_init', 'number', ['string', 'number'], ['/virtual-on', Number(game === 'vonj')]))
       throw Error(Module.UTF8ToString(Module._von_error()));
     Module._von_gpu(1);
-    renderer = await createGeneralRenderer(canvas, fail);
+    renderer = await createGeneralRenderer(canvas, fail, !!Module._von_gpu_projection);
     renderer.stats.backend = 'Standalone Virtual-On + WebGPU';
     renderer.setDisplayMode(displayMode); renderer.prepare(Module);
-    audio = new AudioContext();
+    audio = await createGameAudio({ legacy: new URLSearchParams(location.search).get('audio') !== 'worklet',
+      log: text => send('log', text) });
     void audio.resume();
     Module.model2GpuStats = renderer.stats;
-    window.virtualOn = { advance, pause, resume, save, Module, held, renderer };
+    window.virtualOn = { advance, pause, resume, save, Module, held, renderer, audio };
     running = true; statTime = performance.now();
     report('');
     send('log', 'Standalone compiled i960, SHARC and 68000; native Model 2 board, SCSP sound and Daytona graphics.');

@@ -60,6 +60,13 @@ public:
     std::array<std::vector<uint32_t>, 2> blocks;
     bool short_signed = false;
     uint64_t cycles = 0, instructions = 0, iop_deadline = UINT64_MAX;
+#ifdef VON_SHARC_PROFILE
+    std::array<uint64_t, 3679> pc_counts{};
+#endif
+#ifdef VON_SHARC_MATH
+    unsigned run_polynomial();
+    uint64_t polynomial_instructions = 0;
+#endif
     std::function<uint32_t(uint32_t)> external_read;
     std::function<void(uint32_t, uint32_t)> external_write;
     std::function<void(unsigned, bool)> flag_output = [](unsigned, bool) {};
@@ -152,6 +159,9 @@ public:
     text += '\n' + '\n'.join(translated + oracle) + '\nvoid Sharc::execute_instruction(bool oracle) {\n' + adapt(execution) + '\n}\n}\n'
     text = text.replace('inline ', '')  # helpers also called from sharc_runtime.cpp
     text = text.replace('LOG(', 'logerror(')
+    if words[0xdd8:0xdda] != [0x6e7e091304c4, 0x013e00081424]:
+        raise RuntimeError('SHARC polynomial specialization no longer matches the program')
+    text += '\n#ifdef VON_SHARC_MATH\n#include "sharc_polynomial.inc"\n#endif\n'
     write('sharc_program.cpp', text)
     return {'sources': ['sharc_program.cpp'], 'imageSha256': expected, 'instructions': len(words),
             'compiledWords': len(set(words)), 'interpreter': 'native test build only'}

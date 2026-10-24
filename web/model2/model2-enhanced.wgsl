@@ -1,6 +1,6 @@
 // BSD-3-Clause. General-core adapter; derived directly from Daytona-USA-Web.
 // Port of upstream src/app/gpu/m2.hlsl (Model 2 raster rules).
-struct Screen { size: vec2f, output: vec2f, lod: vec2f, view: vec2f }
+struct Screen { size: vec2f, output: vec2f, lod: vec2f, view: vec2f, projection: vec4f }
 @group(0) @binding(0) var<uniform> screen: Screen;
 @group(0) @binding(1) var<storage, read> texram: array<u32>;
 @group(0) @binding(2) var<storage, read> lumaram: array<u32>;
@@ -20,6 +20,33 @@ struct Out {
  var o: Out;
  o.pos=vec4f((i.pos.x-screen.view.x)/screen.view.y*2.0-1.0,1.0-i.pos.y/screen.size.y*2.0,i.depth,1.0);
  o.oz=i.oz; o.color=i.color; o.info=i.info; o.more=i.more;
+ return o;
+}
+// ABI 6 supplies unprojected unique vertices. Indexing preserves the original
+// triangle fan and polygon order; exceptional inputs retain CPU attributes.
+struct RawIn {
+ @location(0) pos: vec2f, @location(1) depth: f32, @location(2) zuv: vec3f,
+ @location(3) center: vec2f, @location(4) info: vec4u, @location(5) more: vec2u
+}
+@vertex fn vs_projected(i: RawIn) -> Out {
+ var o: Out;
+ var pos=i.pos;
+ var oz=i.zuv;
+ if((i.info.x&0x40000000u)!=0u){
+  oz=vec3f(i.zuv.x,i.zuv.y*i.zuv.x/8.0,i.zuv.z*i.zuv.x/8.0);
+ }else if((i.info.x&0x80000000u)==0u){
+  let z=i.zuv.x;
+  let inverse=1.0/z;
+  pos=vec2f((i.center.x+i.pos.x/z)+screen.projection.x,i.center.y-i.pos.y/z);
+  oz=vec3f(inverse,i.zuv.y*inverse/8.0,i.zuv.z*inverse/8.0);
+ }
+ o.pos=vec4f((pos.x-screen.view.x)/screen.view.y*2.0-1.0,1.0-pos.y/screen.size.y*2.0,i.depth,1.0);
+ let color=i.more.y&0x7fffu;
+ let lum=((i.info.w>>16u)&255u)>>2u;
+ o.color=vec4f(f32(xlat[((color&31u)<<8u)+lum])/255.0,
+  f32(xlat[0x2000u+(((color>>5u)&31u)<<8u)+lum])/255.0,
+  f32(xlat[0x4000u+(((color>>10u)&31u)<<8u)+lum])/255.0,1.0);
+ o.oz=oz; o.info=i.info; o.more=i.more;
  return o;
 }
 const log_table=array<u32,128>(0,2,5,8,11,14,16,19,22,25,27,30,33,35,38,40,43,46,48,51,53,56,58,61,63,65,68,70,73,75,77,80,82,84,87,89,91,93,96,98,100,102,104,106,109,111,113,115,117,119,121,123,125,127,129,132,134,136,138,140,141,143,145,147,149,151,153,155,157,159,161,162,164,166,168,170,172,173,175,177,179,181,182,184,186,188,189,191,193,194,196,198,200,201,203,205,206,208,209,211,213,214,216,218,219,221,222,224,225,227,229,230,232,233,235,236,238,239,241,242,244,245,247,248,250,251,253,254);

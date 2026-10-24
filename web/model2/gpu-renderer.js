@@ -1,6 +1,6 @@
 // BSD-3-Clause. Adapted directly from Daytona-USA-Web/renderer.js.
-// Same 64-byte polygon format, Model 2 texture shader and layered GPU passes;
-// the data provider is now a general MAME hardware core, not Daytona ROM code.
+// Shared 64-byte polygon format, Model 2 texture shader and layered GPU passes.
+// ABI 5 adds raw System 24 snapshots; ABI 6 adds indexed GPU vertex projection.
 import { displayGeometry, DISPLAY_MODES } from './display.js';
 const layerShader = `
 @group(0) @binding(0) var image: texture_2d<f32>;
@@ -37,7 +37,7 @@ fn centered(p:vec2f)->vec2f {
  return sample_layer(centered(p.xy));
 }`;
 
-export async function createGeneralRenderer(canvas, onFailure) {
+export async function createGeneralRenderer(canvas, onFailure, gpuVertices = false) {
   if (!globalThis.isSecureContext || !navigator.gpu) throw Error('WebGPU requires a compatible browser and HTTPS or localhost.');
   // Fullscreen high-DPI shading can overwhelm a laptop's integrated GPU.
   // This is a preference; single-GPU browsers still choose their own adapter.
@@ -56,24 +56,29 @@ export async function createGeneralRenderer(canvas, onFailure) {
   if (!response.ok) { disposed = true; device.destroy(); throw Error('Could not load the Daytona Model 2 shader.'); }
   const modelShader = device.createShaderModule({ label: 'Daytona Model 2 raster rules', code: await response.text() });
   const layerModule = device.createShaderModule({ label: 'System 24 layers', code: layerShader });
-  for (const shader of [modelShader, layerModule]) {
+  const tileResponse = await fetch(new URL('./system24.wgsl', import.meta.url));
+  if (!tileResponse.ok) { disposed = true; device.destroy(); throw Error('Could not load the System 24 shader.'); }
+  const tileModule = device.createShaderModule({ label: 'System 24 GPU composition', code: await tileResponse.text() });
+  for (const shader of [modelShader, layerModule, tileModule]) {
     const result = await shader.getCompilationInfo();
     const errors = result.messages.filter(message => message.type === 'error');
     if (errors.length) { disposed = true; device.destroy(); throw Error(errors.map(message => `${message.lineNum}: ${message.message}`).join('\n')); }
   }
-  const polyPipeline = await device.createRenderPipelineAsync({
+  const makePolyPipeline = projected => device.createRenderPipelineAsync({
     label: 'General Model 2 polygons (Daytona renderer)', layout: 'auto',
-    vertex: { module: modelShader, entryPoint: 'vs_poly', buffers: [{ arrayStride: 64, attributes: [
+    vertex: { module: modelShader, entryPoint: projected ? 'vs_projected' : 'vs_poly', buffers: [{ arrayStride: projected ? 56 : 64, attributes: [
       { shaderLocation: 0, offset: 0, format: 'float32x2' },
       { shaderLocation: 1, offset: 8, format: 'float32' },
       { shaderLocation: 2, offset: 12, format: 'float32x3' },
-      { shaderLocation: 3, offset: 24, format: 'float32x4' },
-      { shaderLocation: 4, offset: 40, format: 'uint32x4' },
-      { shaderLocation: 5, offset: 56, format: 'uint32x2' }] }] },
+      { shaderLocation: 3, offset: 24, format: projected ? 'float32x2' : 'float32x4' },
+      { shaderLocation: 4, offset: projected ? 32 : 40, format: 'uint32x4' },
+      { shaderLocation: 5, offset: projected ? 48 : 56, format: 'uint32x2' }] }] },
     fragment: { module: modelShader, entryPoint: 'ps_poly', targets: [{ format }] },
     primitive: { topology: 'triangle-list', cullMode: 'none' },
     depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' },
   });
+  const polyPipeline = await makePolyPipeline(false);
+  const projectedPipeline = gpuVertices ? await makePolyPipeline(true) : null;
   const makeLayerPipeline = entryPoint => device.createRenderPipelineAsync({
     layout: 'auto', vertex: { module: layerModule, entryPoint: 'vs' },
     fragment: { module: layerModule, entryPoint, targets: [{ format }] },
@@ -82,14 +87,21 @@ export async function createGeneralRenderer(canvas, onFailure) {
   });
   const backPipeline = await makeLayerPipeline('fs_back');
   const frontPipeline = await makeLayerPipeline('fs_front');
+  const tilePipeline = await device.createComputePipelineAsync({ label: 'System 24 tile decoding and composition',
+    layout: 'auto', compute: { module: tileModule, entryPoint: 'compose' } });
   const buffer = (size, usage) => device.createBuffer({ size, usage: usage | GPUBufferUsage.COPY_DST });
-  const screen = buffer(32, GPUBufferUsage.UNIFORM);
+  const screen = buffer(48, GPUBufferUsage.UNIFORM);
   const texram = buffer(0x400000, GPUBufferUsage.STORAGE);
   const luma = buffer(0x20000, GPUBufferUsage.STORAGE);
   const xlat = buffer(0x6000 * 4, GPUBufferUsage.STORAGE);
+  const tileBuffers = [0x10000, 0x80000, 0x4000].map(size => buffer(size, GPUBufferUsage.STORAGE));
+  let tileGroup, tileGenerations = [-1, -1, -1], lastGpuTiles = false;
   const polyGroup = device.createBindGroup({ layout: polyPipeline.getBindGroupLayout(0),
     entries: [screen, texram, luma, xlat].map((value, binding) => ({ binding, resource: { buffer: value } })) });
+  const projectedGroup = projectedPipeline ? device.createBindGroup({ layout: projectedPipeline.getBindGroupLayout(0),
+    entries: [screen, texram, luma, xlat].map((value, binding) => ({ binding, resource: { buffer: value } })) }) : null;
   let vertexBuffer, vertexCapacity = 0, depth, back, front, backGroup, frontGroup;
+  let indexBuffer, indexCapacity = 0;
   let width = 0, height = 0, outputWidth = 0, outputHeight = 0, mode = 'enhanced';
   let geometry, requestedMargin = -1;
   let textureGeneration = -1;
@@ -97,6 +109,8 @@ export async function createGeneralRenderer(canvas, onFailure) {
   const stats = { backend: 'WebGPU + general Model 2 core', frames: 0, polygonFrames: 0,
     vertices: 0, polygons: 0, drawCalls: 0, textureUploads: 0, textureUploadBytes: 0,
     layerUploads: 0, layerUploadBytes: 0, lookupUploads: 0, lookupUploadBytes: 0,
+    tileUploads: 0, tileUploadBytes: 0, tileCompositions: 0,
+    vertexUploadBytes: 0, indexUploadBytes: 0,
     adapter: adapter.info?.description || adapter.info?.device
       || [adapter.info?.vendor, adapter.info?.architecture].filter(Boolean).join(' ') || 'WebGPU' };
   const layerGroup = (texture, pipeline) => device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
@@ -121,14 +135,18 @@ export async function createGeneralRenderer(canvas, onFailure) {
       if (disposed) return;
       const mem = Module.HEAPU8; // Memory growth can replace the underlying view.
       const packet = new Uint32Array(mem.buffer, packetPointer, 16);
-      if (![1, 2, 3, 4].includes(packet[0])) throw Error('Incompatible Model 2 WebGPU frame ABI. Rebuild the engine and reload.');
+      if (![1, 2, 3, 4, 5, 6].includes(packet[0])) throw Error('Incompatible Model 2 WebGPU frame ABI. Rebuild the engine and reload.');
       const w = packet[1], h = packet[2], count = packet[4];
       if (!w || !h || w > 2048 || h > 2048 || count > 32768 * 18) throw Error('Invalid Model 2 GPU frame.');
       this.prepare(Module);
       const { width: ow, height: oh, viewWidth } = geometry;
-      const extra = packet[0] >= 3 ? new Uint32Array(mem.buffer, packetPointer + 64, packet[0] === 4 ? 8 : 4) : [0, 0];
-      const cached = packet[0] === 4 && !Module.model2ForceLayerUpload;
-      const scene = packet[0] === 4 ? extra[6] : Number(count > 0);
+      const extra = packet[0] >= 3 ? new Uint32Array(mem.buffer, packetPointer + 64, packet[0] >= 4 ? 8 : 4) : [0, 0];
+      const cached = packet[0] >= 4 && !Module.model2ForceLayerUpload;
+      const scene = packet[0] >= 4 ? extra[6] : Number(count > 0);
+      const projected = packet[0] === 6;
+      if (projected && !projectedPipeline) throw Error('GPU vertex preparation was not enabled for this engine.');
+      const gpuTiles = packet[0] >= 5;
+      if (gpuTiles !== lastGpuTiles) { tileGenerations.fill(-1); layerGenerations.fill(-1); lastGpuTiles = gpuTiles; }
       const margin = extra[0], offset = margin - (viewWidth - w) / 2;
       if (ow !== outputWidth || oh !== outputHeight) {
         depth?.destroy(); outputWidth = ow; outputHeight = oh; canvas.width = ow; canvas.height = oh;
@@ -136,16 +154,31 @@ export async function createGeneralRenderer(canvas, onFailure) {
       }
       if (w !== width || h !== height) {
         back?.destroy(); front?.destroy(); width = w; height = h;
-        const descriptor = { size: [w, h], format: 'rgba8unorm', usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING };
+        const descriptor = { size: [w, h], format: 'rgba8unorm', usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+          | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING };
         back = device.createTexture(descriptor); front = device.createTexture(descriptor);
         backGroup = layerGroup(back, backPipeline); frontGroup = layerGroup(front, frontPipeline);
         layerGenerations = [-1, -1];
+        tileGenerations.fill(-1);
+        tileGroup = device.createBindGroup({ layout: tilePipeline.getBindGroupLayout(0), entries: [
+          ...tileBuffers.map((buffer, binding) => ({ binding, resource: { buffer } })),
+          { binding: 3, resource: back.createView() }, { binding: 4, resource: front.createView() }] });
       }
       device.queue.writeBuffer(screen, 0, new Float32Array([w, h, ow, oh,
-        Math.round(128 * Math.log2(Math.max(1, oh / h))), scene, offset, viewWidth]));
+        Math.round(128 * Math.log2(Math.max(1, oh / h))), scene, offset, viewWidth, margin, 0, 0, 0]));
       const view = (pointer, length) => mem.subarray(pointer, pointer + length);
       const uploadLayer = (texture, pointer) => device.queue.writeTexture({ texture }, view(pointer, w * h * 4), { bytesPerRow: w * 4 }, [w, h]);
-      for (const [i, texture] of [back, front].entries()) {
+      let composeTiles = false;
+      if (gpuTiles) {
+        const tiles = new Uint32Array(mem.buffer, packetPointer + 96, 6);
+        for (const [i, bytes] of [0x10000, 0x80000, 0x4000].entries()) {
+          if (!cached || tileGenerations[i] !== tiles[3 + i]) {
+            device.queue.writeBuffer(tileBuffers[i], 0, view(tiles[i], bytes));
+            tileGenerations[i] = tiles[3 + i]; composeTiles = true;
+            stats.tileUploads++; stats.tileUploadBytes += bytes;
+          }
+        }
+      } else for (const [i, texture] of [back, front].entries()) {
         if (!cached || layerGenerations[i] !== extra[2 + i]) {
           uploadLayer(texture, packet[7 + i]);
           layerGenerations[i] = extra[2 + i];
@@ -168,20 +201,39 @@ export async function createGeneralRenderer(canvas, onFailure) {
           stats.lookupUploads++; stats.lookupUploadBytes += bytes;
         }
       }
-      const size = count * 64;
+      const indexed = projected ? new Uint32Array(mem.buffer, packetPointer + 120, 2) : null;
+      const vertexCount = projected ? indexed[0] : count;
+      if (vertexCount > 32768 * 18) throw Error('Invalid indexed Model 2 GPU frame.');
+      const size = vertexCount * (projected ? 56 : 64);
       if (size > vertexCapacity) {
         vertexBuffer?.destroy(); vertexCapacity = Math.ceil(size / 65536) * 65536;
         vertexBuffer = buffer(vertexCapacity, GPUBufferUsage.VERTEX);
       }
-      if (size) device.queue.writeBuffer(vertexBuffer, 0, view(packet[3], size));
+      if (size) { device.queue.writeBuffer(vertexBuffer, 0, view(packet[3], size)); stats.vertexUploadBytes += size; }
+      if (projected && count) {
+        const indexBytes = count * 4;
+        if (indexBytes > indexCapacity) {
+          indexBuffer?.destroy(); indexCapacity = Math.ceil(indexBytes / 65536) * 65536;
+          indexBuffer = buffer(indexCapacity, GPUBufferUsage.INDEX);
+        }
+        device.queue.writeBuffer(indexBuffer, 0, view(indexed[1], indexBytes)); stats.indexUploadBytes += indexBytes;
+      }
       const encoder = device.createCommandEncoder();
+      if (composeTiles) {
+        const compute = encoder.beginComputePass();
+        compute.setPipeline(tilePipeline); compute.setBindGroup(0, tileGroup);
+        compute.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8)); compute.end();
+        stats.tileCompositions++;
+      }
       const pass = encoder.beginRenderPass({ colorAttachments: [{ view: context.getCurrentTexture().createView(),
         loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } }],
         depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'discard', depthClearValue: 1 } });
       pass.setPipeline(backPipeline); pass.setBindGroup(0, backGroup); pass.draw(3);
       let draws = 0;
       if (size) {
-        pass.setPipeline(polyPipeline); pass.setBindGroup(0, polyGroup); pass.setVertexBuffer(0, vertexBuffer);
+        pass.setPipeline(projected ? projectedPipeline : polyPipeline);
+        pass.setBindGroup(0, projected ? projectedGroup : polyGroup); pass.setVertexBuffer(0, vertexBuffer);
+        if (projected) pass.setIndexBuffer(indexBuffer, 'uint32');
         const batches = new Uint32Array(mem.buffer, packet[5], packet[6] * 6);
         for (let n = 0; n < batches.length; n += 6) {
           const x = Math.max(0, Math.floor((batches[n + 2] - offset) * ow / viewWidth));
@@ -190,21 +242,42 @@ export async function createGeneralRenderer(canvas, onFailure) {
           const bottom = Math.min(oh, Math.ceil((batches[n + 3] + batches[n + 5]) * oh / h));
           if (right <= x || bottom <= y) continue;
           pass.setScissorRect(x, y, right - x, bottom - y);
-          pass.draw(batches[n + 1], 1, batches[n]); draws++;
+          if (projected) pass.drawIndexed(batches[n + 1], 1, batches[n]);
+          else pass.draw(batches[n + 1], 1, batches[n]);
+          draws++;
         }
       }
       pass.setScissorRect(0, 0, ow, oh); pass.setPipeline(frontPipeline); pass.setBindGroup(0, frontGroup); pass.draw(3);
       pass.end(); device.queue.submit([encoder.finish()]);
       Object.assign(stats, { frames: stats.frames + 1, polygonFrames: stats.polygonFrames + Number(count > 0),
-        vertices: count, polygons: packet[14], drawCalls: draws, resolution: `${ow}×${oh}`,
+        vertices: count, uniqueVertices: vertexCount, gpuVertexPreparation: projected,
+        polygons: packet[14], drawCalls: draws, resolution: `${ow}×${oh}`,
         sequence: packet[13], textureGeneration: packet[15], displayMode: mode,
         aspect: geometry.aspect, viewWidth, capturedMargin: margin, widenedPolygons: extra[1],
         sceneBackdrop: !!scene, packetABI: packet[0],
+        gpuTiles, tileGenerations: [...tileGenerations],
         layerGenerations: [...layerGenerations], lookupGenerations: [...lookupGenerations] });
+    },
+    // Diagnostic readback only; never used in the gameplay frame loop.
+    async readLayers() {
+      const row = Math.ceil(width * 4 / 256) * 256, size = row * height;
+      const readback = device.createBuffer({ size: size * 2, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+      try {
+        const encoder = device.createCommandEncoder();
+        for (const [i, texture] of [back, front].entries())
+          encoder.copyTextureToBuffer({ texture }, { buffer: readback, offset: i * size, bytesPerRow: row }, [width, height]);
+        device.queue.submit([encoder.finish()]); await readback.mapAsync(GPUMapMode.READ);
+        const data = new Uint8Array(readback.getMappedRange());
+        return [0, 1].map(i => {
+          const pixels = new Uint8Array(width * height * 4);
+          for (let y = 0; y < height; ++y) pixels.set(data.subarray(i * size + y * row, i * size + y * row + width * 4), y * width * 4);
+          return pixels;
+        });
+      } finally { readback.destroy(); }
     },
     destroy() {
       disposed = true;
-      for (const resource of [depth, back, front, vertexBuffer, screen, texram, luma, xlat]) resource?.destroy();
+      for (const resource of [depth, back, front, vertexBuffer, indexBuffer, screen, texram, luma, xlat, ...tileBuffers]) resource?.destroy();
       context.unconfigure(); device.destroy();
     },
   };

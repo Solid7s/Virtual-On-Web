@@ -43,6 +43,7 @@ public:
     bool render_this_frame(uint64_t frame) const { return !(video_ & 1) || !(frame & 1); }
     void copy_buffer(uint32_t *destination) const;
     const uint8_t *memory(uint32_t address) const;
+    uint64_t memory_generation(uint32_t address) const;
     void sound_ready(bool ready);
     void attach_devices(Devices &devices) { devices_ = &devices; }
     std::function<void(int, bool)> irq;
@@ -69,6 +70,10 @@ private:
     struct Timer { uint32_t value = 0xfffff, original = 0; uint64_t start = 0, deadline = 0; bool running = false; };
     std::vector<std::vector<uint8_t>> memory_;
     std::vector<Region> regions_;
+    // One region per 64 KiB page; bounds below still handle the short register
+    // RAM region. Aliases share the same backing-store generation.
+    std::array<uint8_t, 65536> region_pages_{};
+    std::vector<uint64_t> memory_generations_;
     const Region *region(uint32_t) const;
     size_t add(uint32_t, uint32_t, uint8_t fill = 0, bool burst = true);
     void alias(uint32_t, uint32_t, size_t, uint32_t offset = 0, bool readonly = false);
