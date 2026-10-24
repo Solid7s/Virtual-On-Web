@@ -17,12 +17,6 @@ void Sharc::reset() {
     s.pcstk = 0xffffff; s.curlcntr = 0xffffffff; s.laddr.unpack(0xffffffff);
     s.syscon = 0x10;
     cycles = instructions = 0; iop_deadline = UINT64_MAX; short_signed = false;
-#ifdef VON_SHARC_PROFILE
-    pc_counts.fill(0);
-#endif
-#ifdef VON_SHARC_MATH
-    polynomial_instructions = 0;
-#endif
 }
 void Sharc::set_flag_input(unsigned flag, bool value) {
     if (flag >= 4 || BIT(m_core->mode2, flag+15)) fatalerror("SHARC flag %u is not an input", flag);
@@ -36,9 +30,6 @@ void Sharc::run_compiled(uint32_t instruction_pc) {
         fatalerror("Uncompiled or modified SHARC instruction at %08x: %012llx (expected %012llx)", instruction_pc,
             (unsigned long long)m_core->opcode, (unsigned long long)(index < program_size ? program[index].word : 0));
     program[index].run(*this);
-#ifdef VON_SHARC_PROFILE
-    ++pc_counts[index];
-#endif
 }
 void Sharc::step(bool oracle) {
 #ifndef VON_TEST_ORACLE

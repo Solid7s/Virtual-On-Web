@@ -17,7 +17,6 @@ from pathlib import Path
 from prepare_virtual_on_aot import ROOT, MAME_COMMIT, RECOMP_COMMIT, original, PROFILES
 from prepare_virtual_on_programs import body_of, i960_semantics
 from prepare_virtual_on_sharc import prepare_sharc
-from prepare_virtual_on_blocks import generate_blocks
 
 OUT = ROOT / 'build/v3-standalone'
 AOT = ROOT / 'build/v3-recompiler'
@@ -54,7 +53,6 @@ def prepare():
 #include <array>
 #include <vector>
 namespace von {
-class FrameRuntime;
 void double_to_extended(double, uint32_t *);
 double extended_to_double(const uint32_t *);
 class I960 {
@@ -68,36 +66,20 @@ public:
     void standard_irq_callback(int, uint32_t) {}
     void i960_stall() { m_stalled = true; m_IP = m_PIP; }
     void init_program(bool japan);
-#ifdef VON_REGISTER_BLOCKS
-    unsigned step(FrameRuntime *frames = nullptr, uint64_t next_sound = 0);
-    unsigned run_register_block(uint64_t budget);
-    bool blocks_enabled = true;
-    uint64_t block_instructions = 0;
-#else
     unsigned step();
-#endif
 #ifdef VON_TEST_ORACLE
     unsigned oracle_step();
 #endif
     uint64_t instructions = 0, cycles = 0;
     using Handler = void (*)(I960 &);
-#ifdef VON_REGISTER_BLOCKS
-    struct Block { Handler run; uint16_t ticks, count; };
-    unsigned execute_register_block(const Block &block);
-#endif
-    struct Entry {
-        uint32_t pc, word; Handler run;
-#ifdef VON_REGISTER_BLOCKS
-        const Block *block;
-#endif
-    };
+    struct Entry { uint32_t pc, word; Handler run; };
     const Entry *program = nullptr;
     size_t program_size = 0;
     std::vector<const Entry *> dispatch;
     template<uint32_t opcode> void compiled_op();
     template<uint32_t opcode> static void invoke(I960 &c) { c.compiled_op<opcode>(); }
     std::vector<uint32_t> snapshot() const;
-''' + fields + '\n};\n} // namespace von\n#ifdef VON_REGISTER_BLOCKS\n#include "i960_registers.h"\n#endif\n')
+''' + fields + '\n};\n} // namespace von\n')
     support = source[source.index('uint32_t i960_cpu_device::i960_read_dword_unaligned'):source.index('void i960_cpu_device::execute_op')]
     for signature in ('void i960_cpu_device::execute_set_input(int irqline, int state)',
                       'void i960_cpu_device::device_reset()'):
@@ -113,18 +95,6 @@ namespace von {
 '''
     support = support.replace('static void double_to_extended', 'void double_to_extended')
     support = support.replace('static double extended_to_double', 'double extended_to_double')
-    # Make register selection visible to the optimizer: literal operands and
-    # register numbers are constants in each precompiled instruction/block.
-    registers = []
-    for name in ('get_1_ri', 'get_2_ri', 'set_ri', 'cmp_s', 'cmp_u', 'concmp_s', 'concmp_u', 'test'):
-        pattern = r'^(?:uint32_t|void) i960_cpu_device::' + name + r'\([^\n]*\)\n\{.*?^\}'
-        match = re.search(pattern, support, re.M | re.S)
-        if not match:
-            raise RuntimeError(f'Missing pinned register helper: {name}')
-        registers.append('inline ' + adapt(match[0]))
-        support = (support[:match.start()] + '#ifndef VON_REGISTER_BLOCKS\n' + match[0]
-                   + '\n#endif' + support[match.end():])
-    write('i960_registers.h', NOTICE + '#pragma once\nnamespace von {\n' + '\n'.join(registers) + '\n}\n')
     write('i960_support.cpp', prefix + adapt(support) + '\n}\n')
     semantics = adapt(i960_semantics(source)).replace('aot_op', 'compiled_op')
     semantics = semantics.replace('execute_op(opcode);', 'fatalerror("Uncompiled opcode %08x", opcode);')
@@ -270,17 +240,12 @@ namespace von {
         text.append('}')
         write(name, '\n'.join(text) + '\n')
         chunks.append(name)
-    block_metadata, block_entries = generate_blocks(profiles, write)
-    tables = ['#include "program_handlers.h"', '#ifdef VON_REGISTER_BLOCKS',
-              '#include "block_handlers.h"', '#define VON_BLOCK(p) , p', '#else',
-              '#define VON_BLOCK(p)', '#endif', 'namespace von {']
+    tables = ['#include "program_handlers.h"', 'namespace von {']
     for game, records in profiles.items():
         tables.append(f'static const I960::Entry {game}[] = {{')
         for pc, values in sorted(records.items()):
             for word in sorted(values):
-                index = block_entries[game].get(pc)
-                block = 'nullptr' if index is None else f'&compiled_blocks[{index}]'
-                tables.append(f'{{0x{pc:x}, 0x{word:08x}u, op_{indexes[word]} VON_BLOCK({block})}},')
+                tables.append(f'{{0x{pc:x}, 0x{word:08x}u, op_{indexes[word]}}},')
         tables.append('};')
     tables.append('''void I960::init_program(bool japan) {
     program = japan ? vonj : vonu;
@@ -297,8 +262,6 @@ namespace von {
 }''')
     write('program_tables.cpp', '\n'.join(tables) + '\n')
     metadata.update({'opcodes': len(words), 'sources': ['i960_support.cpp', 'program_tables.cpp', *chunks]})
-    metadata['blocks'] = block_metadata
-    metadata['sources'] += metadata['blocks']['sources']
     metadata['sharc'] = prepare_sharc(OUT)
     metadata['sources'] += metadata['sharc']['sources']
     # Reuse the pinned Daytona geometrizer and raster/tile semantics.

@@ -12,18 +12,6 @@ public:
     struct Vertex { float x, y, depth, ooz, uoz, voz, r, g, b, a; uint32_t info[4], more[2]; };
     struct Batch { uint32_t first, count, x, y, width, height; };
     static_assert(sizeof(Vertex) == 64 && sizeof(Batch) == 24);
-#ifdef VON_GPU_PROJECTION
-    // ABI 6: unique raw vertices and a triangle index stream. The vertex shader
-    // computes projection, reciprocal depth, UV attributes and flat color.
-    struct RawVertex { float x, y, depth, z, u, v, cx, cy; uint32_t info[4], more[2]; };
-    static_assert(sizeof(RawVertex) == 56);
-    std::vector<RawVertex> raw_vertices;
-    std::vector<uint32_t> indices;
-#ifndef VON_GPU_PROJECTION_DEFAULT
-#define VON_GPU_PROJECTION_DEFAULT 1
-#endif
-    unsigned gpu_projection = VON_GPU_PROJECTION_DEFAULT;
-#endif
     std::vector<Vertex> vertices;
     std::vector<Batch> batches;
     std::array<uint32_t, 0x8000> luma{};
@@ -52,12 +40,6 @@ public:
     static uint16_t word(const uint8_t *p, unsigned i) { return uint16_t(p[2*i]) | uint16_t(p[2*i+1]) << 8; }
     void build(Board &board, Coprocessor &copro, rt::Video &video, const rt::VideoMem &mem, bool gpu_tiles = false) {
         vertices.clear(); batches.clear();
-#ifdef VON_GPU_PROJECTION
-        raw_vertices.clear(); indices.clear();
-        const bool project = gpu_projection && gpu_tiles;
-#else
-        const bool project = false;
-#endif
         const auto &polys = video.gpu_polys();
         order.resize(polys.size()); std::iota(order.begin(), order.end(), size_t(0));
         std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
@@ -91,21 +73,8 @@ public:
             const int top = std::max(0, 384 - poly.viewport[3] + board.yoffset);
             const int bottom = std::min(383, 384 - poly.viewport[1] + board.yoffset);
             if (right < left || bottom < top) continue;
-            bool gpu_math = project, finite = true;
-#ifdef VON_GPU_PROJECTION
-            gpu_math &= gpu_projection == 1;
-#endif
-            // Exceptional coordinates use the original CPU calculations and
-            // finite rejection. Ordinary bounded inputs cannot overflow during
-            // projection. CPU projection is also retained when widescreen
-            // coverage still needs it; it never feeds back into game state.
-            if (project) for (unsigned i = 0; i < poly.num_vertices; ++i) {
-                const auto &v = poly.v[i];
-                gpu_math &= std::abs(v.x) <= 1e20f && std::abs(v.y) <= 1e20f
-                    && std::abs(v.p[0]) >= 1e-10f && std::abs(v.p[0]) <= 1e20f;
-            }
-            const bool need_coverage = margin && std::max(max_window, uint32_t(poly.window)) <= 1 && !coverage.scene();
-            if (!gpu_math || need_coverage) for (unsigned i = 0; i < poly.num_vertices; ++i) {
+            bool finite = true;
+            for (unsigned i = 0; i < poly.num_vertices; ++i) {
                 auto &v = poly.v[i];
                 const float z = v.p[0] + std::numeric_limits<float>::min();
                 v.x = board.xoffset + poly.center[0] + v.x / z;
@@ -113,15 +82,15 @@ public:
                 finite &= std::isfinite(v.x) && std::isfinite(v.y);
             }
             if (!finite) continue;
-            uint32_t first = vertices.size();
-#ifdef VON_GPU_PROJECTION
-            if (project) first = indices.size();
-#endif
-            Batch clip{first, 0, uint32_t(left), uint32_t(top), uint32_t(right-left+1), uint32_t(bottom-top+1)};
+            Batch clip{uint32_t(vertices.size()), 0, uint32_t(left), uint32_t(top), uint32_t(right-left+1), uint32_t(bottom-top+1)};
             if (batches.empty() || std::memcmp(&batches.back().x, &clip.x, 16)) batches.push_back(clip);
             const uint32_t color = word(mem.palram, ((poly.texheader[3] >> 6) & 0x3ff) + 0x1000);
             const bool ocean = water && (th0 & 0x7fff) == 0x40d2 && th1 == 0 && th2 == 0x833
                 && poly.texheader[3] == 0x8a00 && poly.luma == 255 && word(mem.palram, 0x1228) == 0xf7bd;
+            const auto lum = poly.luma >> 2;
+            const float r = xlat[((color & 31) << 8) + lum] / 255.0f;
+            const float g = xlat[0x2000 + (((color >> 5) & 31) << 8) + lum] / 255.0f;
+            const float b = xlat[0x4000 + (((color >> 10) & 31) << 8) + lum] / 255.0f;
             const float depth = float(++count) / 32770.0f;
             if (wide) ++widened;
             max_window = std::max(max_window, uint32_t(poly.window));
@@ -132,37 +101,6 @@ public:
             const uint32_t flags = renderer | ((th0 >> 15) & 1) << 2 | (((th0 >> 6) & 1) & ~mirx) << 3 |
                 (((th0 >> 7) & 1) & ~miry) << 4 | mirx << 5 | miry << 6 | ((th0 >> 12) & 1) << 7 |
                 ((th0 >> 10) & 3) << 8 | ((th2 >> 12) & 1) << 10 | (4 + std::min(wlog, hlog)) << 12 | wlog << 17 | hlog << 20;
-#ifdef VON_GPU_PROJECTION
-            if (project) {
-                const uint32_t base = raw_vertices.size();
-                for (unsigned k = 0; k < poly.num_vertices; ++k) {
-                    const auto &raw = polys[index].v[k];
-                    const auto &p = poly.v[k];
-                    const float z = raw.p[0] + std::numeric_limits<float>::min();
-                    RawVertex v{raw.x, raw.y, depth, z, raw.p[1], raw.p[2],
-                        float(board.xoffset + poly.center[0]), float(384 - poly.center[1] + board.yoffset),
-                        {flags | (gpu_math ? 0u : gpu_projection == 2 ? 0x40000000u : 0x80000000u),
-                         (32u*(th2 & 63)) | (32u*((th2 >> 6) & 31)) << 16,
-                         (((th2 >> 13) & 1)*128) | (((th2 >> 14) & 3)*128) << 16,
-                         ((th1 & 255) << 7) | uint32_t(poly.luma) << 16},
-                        {uint32_t(poly.texlod), ocean ? 0x10000u : color & 0x7fffu}};
-                    if (!gpu_math) {
-                        v.x = p.x + margin; v.y = p.y; v.z = 1 / z;
-                        if (gpu_projection != 2) { v.u = p.p[1]*v.z/8; v.v = p.p[2]*v.z/8; }
-                    }
-                    raw_vertices.push_back(v);
-                }
-                for (unsigned k = 1; k+1 < poly.num_vertices; ++k) {
-                    indices.push_back(base); indices.push_back(base+k); indices.push_back(base+k+1);
-                }
-                batches.back().count = indices.size() - batches.back().first;
-                continue;
-            }
-#endif
-            const auto lum = poly.luma >> 2;
-            const float r = xlat[((color & 31) << 8) + lum] / 255.0f;
-            const float g = xlat[0x2000 + (((color >> 5) & 31) << 8) + lum] / 255.0f;
-            const float b = xlat[0x4000 + (((color >> 10) & 31) << 8) + lum] / 255.0f;
             Vertex v[8];
             for (unsigned k = 0; k < poly.num_vertices; ++k) {
                 const auto &p = poly.v[k];
@@ -214,12 +152,6 @@ public:
                 packet[27 + i] = generations[4 + i];
             }
         }
-#ifdef VON_GPU_PROJECTION
-        if (project) {
-            packet[0] = 6; packet[3] = ptr(raw_vertices.data()); packet[4] = indices.size();
-            packet[30] = raw_vertices.size(); packet[31] = ptr(indices.data());
-        }
-#endif
     }
 };
 }

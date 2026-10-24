@@ -1,5 +1,5 @@
 {
-  "kind": "player-wasm-checksum",
+  "kind": "player-wasm-cpu-gpu",
   "mameRuntimeLinked": false,
   "interpreterLinked": false,
   "generation": {
@@ -84,61 +84,9 @@
       "program_056.cpp",
       "program_057.cpp",
       "program_058.cpp",
-      "block_tables.cpp",
-      "blocks_000.cpp",
-      "blocks_001.cpp",
-      "blocks_002.cpp",
-      "blocks_003.cpp",
-      "blocks_004.cpp",
-      "blocks_005.cpp",
-      "blocks_006.cpp",
-      "blocks_007.cpp",
-      "blocks_008.cpp",
-      "blocks_009.cpp",
-      "blocks_010.cpp",
-      "blocks_011.cpp",
-      "blocks_012.cpp",
-      "blocks_013.cpp",
-      "blocks_014.cpp",
-      "blocks_015.cpp",
-      "blocks_016.cpp",
-      "blocks_017.cpp",
-      "blocks_018.cpp",
       "sharc_program.cpp",
       "daytona/runtime/geo.cpp"
     ],
-    "blocks": {
-      "kind": "register-only-before-device-deadline",
-      "maximumInstructions": 8,
-      "uniqueBlocks": 4810,
-      "entries": {
-        "vonu": 12606,
-        "vonj": 12591
-      },
-      "sources": [
-        "block_tables.cpp",
-        "blocks_000.cpp",
-        "blocks_001.cpp",
-        "blocks_002.cpp",
-        "blocks_003.cpp",
-        "blocks_004.cpp",
-        "blocks_005.cpp",
-        "blocks_006.cpp",
-        "blocks_007.cpp",
-        "blocks_008.cpp",
-        "blocks_009.cpp",
-        "blocks_010.cpp",
-        "blocks_011.cpp",
-        "blocks_012.cpp",
-        "blocks_013.cpp",
-        "blocks_014.cpp",
-        "blocks_015.cpp",
-        "blocks_016.cpp",
-        "blocks_017.cpp",
-        "blocks_018.cpp"
-      ],
-      "enabled": false
-    },
     "sharc": {
       "sources": [
         "sharc_program.cpp"
@@ -229,8 +177,8 @@
     "build/v3-standalone/sound_dsp.cpp"
   ],
   "artifacts": {
-    "virtual-on-standalone.cjs": "cd30df653fa4100ff0bfb51a150323271d9c20698b2258aef9d1d5beeff51e94",
-    "virtual-on-standalone.wasm": "22d10ac3852d32b8240c9f7973c7b4682b25941615f8c8bb5d13f209dceb283c"
+    "virtual-on-standalone.cjs": "47b1418b7b16d1093f5e5c5614ddcfa75c048813ca10b4fed8d95f972950eb53",
+    "virtual-on-standalone.wasm": "ab95a25f700a001c28243d9bb8a9cd197c5e65dd118a38551ead951e40f55ae9"
   },
-  "wasmBytes": 8793881
+  "wasmBytes": 9252377
 }

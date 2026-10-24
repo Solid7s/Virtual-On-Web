@@ -47,8 +47,6 @@ struct Player {
     uint64_t last_parsed = 0;
     uint64_t next_sound = 0, audio_frames = 0;
     float audio_peak = 0;
-    bool audio_checksums = false;
-    uint64_t audio_hashed_frames = 0;
     uint64_t audio_hash = 14695981039346656037ull;
 #ifdef VON_TEST_ORACLE
     std::map<uint32_t, uint32_t> harvested;
@@ -119,28 +117,17 @@ struct Player {
             if (pc >= 0x200000 || !cpu.dispatch[pc >> 2]) harvested[pc] = board.read_dword(pc);
             frames.advance(ticks);
 #else
-#ifdef VON_REGISTER_BLOCKS
-            frames.advance(cpu.step(&frames, next_sound));
-#else
             frames.advance(cpu.step());
-#endif
 #endif
             if (board.now() >= next_sound) { sound->advance(board.now()); next_sound = board.now() + 1024; }
             if (++watchdog > 2000000) throw std::runtime_error("Main CPU frame watchdog");
         }
         sound->advance(board.now());
         audio_frames += sound->chip->samples.size()/2;
-        // Cumulative hashes are replay diagnostics, not part of sound playback.
-        // Keep the branch outside the sample loop so normal play only tracks peak.
-        if (audio_checksums) {
-            for (auto sample : sound->chip->samples) {
-                audio_peak = std::max(audio_peak, std::abs(sample));
-                auto bits = von::f2u(sample);
-                for (unsigned i = 0; i < 4; ++i) audio_hash = (audio_hash ^ uint8_t(bits >> (i*8))) * 1099511628211ull;
-            }
-            audio_hashed_frames += sound->chip->samples.size()/2;
-        } else {
-            for (auto sample : sound->chip->samples) audio_peak = std::max(audio_peak, std::abs(sample));
+        for (auto sample : sound->chip->samples) {
+            audio_peak = std::max(audio_peak, std::abs(sample));
+            auto bits = von::f2u(sample);
+            for (unsigned i = 0; i < 4; ++i) audio_hash = (audio_hash ^ uint8_t(bits >> (i*8))) * 1099511628211ull;
         }
     }
 };
@@ -185,37 +172,6 @@ VON_EXPORT void von_draw(int enabled) { if (player) player->draw = enabled; }
 VON_EXPORT const float *von_audio() { return player ? player->sound->chip->samples.data() : nullptr; }
 VON_EXPORT uint32_t von_audio_count() { return player ? player->sound->chip->samples.size()/2 : 0; }
 VON_EXPORT float von_audio_peak() { return player ? player->audio_peak : 0; }
-VON_EXPORT void von_audio_checksums(int enabled) { if (player) player->audio_checksums = enabled != 0; }
-VON_EXPORT double von_audio_hashed_frames() { return player ? double(player->audio_hashed_frames) : 0; }
-#ifdef VON_SHARC_MATH
-VON_EXPORT double von_sharc_math_instructions() { return player ? double(player->copro.cpu.polynomial_instructions) : 0; }
-#endif
-#ifdef VON_SHARC_PROFILE
-VON_EXPORT const char *von_sharc_profile() {
-    static std::string text;
-    std::ostringstream out;
-    out << '[';
-    if (player) for (unsigned i = 0; i < player->copro.cpu.pc_counts.size(); ++i) {
-        if (i) out << ',';
-        out << player->copro.cpu.pc_counts[i];
-    }
-    out << ']'; text = out.str(); return text.c_str();
-}
-#endif
-#ifdef VON_GPU_PROJECTION
-VON_EXPORT void von_gpu_projection(int mode) { if (player && player->gpu) player->gpu->gpu_projection = std::clamp(mode, 0, 2); }
-#endif
-#ifdef VON_DSP_CACHE
-VON_EXPORT const char *von_dsp_info() {
-    static std::string text;
-    if (!player) return "{}";
-    const auto &dsp = player->sound->chip->m_DSP;
-    text = "{\"samples\":" + std::to_string(dsp.executed_samples)
-        + ",\"decodes\":" + std::to_string(dsp.decoded_instructions)
-        + ",\"steps\":" + std::to_string(dsp.LastStep) + "}";
-    return text.c_str();
-}
-#endif
 VON_EXPORT uint32_t von_audio_total() { return player ? player->audio_frames : 0; }
 VON_EXPORT uint32_t von_sound_commands() { return player ? player->sound->received : 0; }
 VON_EXPORT void von_fast_wait(int enabled) { if (player) player->wait.enabled = enabled != 0; }
@@ -236,11 +192,7 @@ VON_EXPORT const char *von_state() {
         << ",\"audioFrames\":" << p.audio_frames << ",\"audioPeak\":" << p.audio_peak
         << std::hex << ",\"cpu\":\"" << hash(p.cpu.snapshot()) << "\",\"board\":\"" << hash(p.board.snapshot())
         << "\",\"memory\":\"" << p.board.memory_hash() << "\",\"sharc\":\"" << hash(p.copro.cpu.snapshot())
-        << "\",\"sharcMemory\":\"" << p.copro.cpu.memory_hash() << "\",\"audio\":";
-    // A checksum is meaningful only if it covers every sample since initialization.
-    if (p.audio_checksums && p.audio_hashed_frames == p.audio_frames) out << '"' << p.audio_hash << '"';
-    else out << "null";
-    out << '}';
+        << "\",\"sharcMemory\":\"" << p.copro.cpu.memory_hash() << "\",\"audio\":\"" << p.audio_hash << "\"}";
     text = out.str(); return text.c_str();
 }
 VON_EXPORT const uint32_t *von_packet() { return player ? player->gpu->packet.data() : nullptr; }
@@ -248,10 +200,6 @@ VON_EXPORT void von_gpu(int enabled) {
     if (player) { player->use_gpu = enabled; player->video->set_external_3d(enabled); }
 }
 VON_EXPORT void von_gpu_tiles(int enabled) { if (player) player->gpu_tiles = enabled != 0; }
-#ifdef VON_REGISTER_BLOCKS
-VON_EXPORT void von_blocks(int enabled) { if (player) player->cpu.blocks_enabled = enabled != 0; }
-VON_EXPORT double von_block_instructions() { return player ? double(player->cpu.block_instructions) : 0; }
-#endif
 VON_EXPORT void model2_webgpu_margin(int margin) {
     if (player) { player->gpu->margin = std::clamp(margin, 0, 1024); player->frames.geometry->set_wide_margin(player->gpu->margin); }
 }
@@ -259,7 +207,6 @@ VON_EXPORT void model2_webgpu_margin(int margin) {
 int main(int argc, char **argv) {
     if (argc < 3) return 0;
     if (!von_init(argv[1], std::string(argv[2]) == "vonj")) return 1;
-    von_audio_checksums(1); // The command-line player is a diagnostic replay host.
     const unsigned count = argc > 3 ? std::stoul(argv[3]) : 1200;
     player->draw = false;
     if (argc > 6 && std::string(argv[6]) == "--no-fast") player->wait.enabled = false;

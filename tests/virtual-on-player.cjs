@@ -59,8 +59,6 @@ fs.mkdirSync(out, { recursive: true });
     const frame = page.frames().find(f => f.url().includes('/virtual-on-player.html'));
     const showGameActions = () => page.frameLocator('#runner').locator('#screen').hover();
     assert.ok(await frame.evaluate(() => !!window.virtualOn), await page.locator('#log').textContent());
-    if (process.env.TEST_PROJECTION !== undefined)
-      await frame.evaluate(mode => Module._von_gpu_projection(Number(mode)), process.env.TEST_PROJECTION);
     const assertBrowserLayout = async () => {
       assert.deepEqual(await page.locator('#runner').boundingBox(), { x: 0, y: 0, ...page.viewportSize() },
         'The game must fill the browser viewport');
@@ -103,10 +101,7 @@ fs.mkdirSync(out, { recursive: true });
           const [, front] = await virtualOn.renderer.readLayers();
           return new Uint32Array(front.buffer).reduce((n, p) => n + Number(p !== 0), 0);
         })(),
-        audioFrames: Module._von_audio_total(), audioHashedFrames: Module._von_audio_hashed_frames?.() ?? null,
-        soundCommands: Module._von_sound_commands(), gpu: { ...virtualOn.renderer.stats } }), name));
-      if (records.at(-1).audioHashedFrames !== null)
-        assert.equal(records.at(-1).audioHashedFrames, 0, 'Normal gameplay must skip diagnostic checksums');
+        audioFrames: Module._von_audio_total(), soundCommands: Module._von_sound_commands(), gpu: { ...virtualOn.renderer.stats } }), name));
     };
     const pulse = async key => {
       await frame.locator('#screen').focus(); await page.keyboard.down(key); await advance(18);

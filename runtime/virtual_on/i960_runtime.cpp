@@ -1,39 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Standalone execution boundary: no machine, device, scheduler or interpreter.
 #include "i960.h"
-#ifdef VON_REGISTER_BLOCKS
-#include "frame_runtime.h"
-#endif
 #include <algorithm>
 
 namespace von {
-#ifdef VON_REGISTER_BLOCKS
-unsigned I960::run_register_block(uint64_t budget) {
-    if (!blocks_enabled || m_stall_state.burst_mode || m_immediate_irq ||
-        m_IP >= 0x200000 || (m_IP & 3)) return 0;
-    const auto *entry = dispatch[m_IP >> 2];
-    const auto *block = entry ? entry->block : nullptr;
-    // Strictly before every event: no device can observe intermediate state,
-    // and these whitelisted instructions cannot access memory or trigger IRQs.
-    if (!block || block->ticks >= budget) return 0;
-    return execute_register_block(*block);
-}
-
-unsigned I960::execute_register_block(const Block &block) {
-    m_stalled = false;
-    block.run(*this);
-    m_IP += block.count * 4;
-    m_PIP = m_IP - 4;
-    instructions += block.count;
-    block_instructions += block.count;
-    cycles += block.ticks;
-    return block.ticks;
-}
-
-unsigned I960::step(FrameRuntime *frames, uint64_t next_sound) {
-#else
 unsigned I960::step() {
-#endif
     if (!program) throw std::runtime_error("Initialize the compiled program before stepping");
     // Like the reference, interrupts must wait for a stalled burst to finish.
     m_icount = 0;
@@ -50,15 +21,6 @@ unsigned I960::step() {
         }
     }
     if (!entry) fatalerror("No compiled instruction at %08x", m_IP);
-#ifdef VON_REGISTER_BLOCKS
-    if (frames && blocks_enabled && entry->block && !m_stall_state.burst_mode && !m_immediate_irq && !m_icount) {
-        const uint64_t deadline = std::min({frames->next_vblank, frames->board.next_event(),
-            frames->copro.uart ? frames->copro.uart->next_event() : UINT64_MAX, next_sound});
-        const auto now = frames->board.now();
-        if (deadline > now && entry->block->ticks < deadline - now)
-            return execute_register_block(*entry->block);
-    }
-#endif
     m_PIP = m_IP; m_IP += 4; m_stalled = false;
     if (m_stall_state.burst_mode) execute_burst_stall_op(entry->word);
     else entry->run(*this);

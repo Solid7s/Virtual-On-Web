@@ -145,10 +145,7 @@ $('launch').addEventListener('click', async () => {
     const engine = executionEngine(selected.id, videoBackend);
     const standalone = ['vonu', 'vonj'].includes(selected.id) && standaloneRequested;
     log(`Execution: ${standalone ? 'standalone compiled Virtual-On' : engine}.`);
-    const options = new URLSearchParams(), query = new URLSearchParams(location.search);
-    if (query.has('manual')) options.set('manual', '1');
-    if (['legacy', 'worklet'].includes(query.get('audio'))) options.set('audio', query.get('audio'));
-    const manual = options.size ? `?${options}` : '';
+    const manual = new URLSearchParams(location.search).has('manual') ? '?manual=1' : '';
     $('runner').src = new URL(standalone ? `./virtual-on-player.html${manual}`
       : engine === 'daytona-compiled' ? '../../daytona.html?embedded=1' : './runner.html', import.meta.url).href;
     $('stop').disabled = false;
