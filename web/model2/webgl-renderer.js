@@ -83,7 +83,7 @@ export function createWebGLRenderer(canvas, onFailure) {
     if (gl.getError() !== gl.NO_ERROR) throw Error('WebGL could not allocate the game renderer.');
     return {
       stats,
-      setDisplayMode(value) { if (!DISPLAY_MODES.includes(value)) throw Error('Invalid display mode'); mode=value; },
+      setDisplayMode(value) { if (!DISPLAY_MODES.includes(value)) throw Error('Invalid display mode'); mode=value; geometry=undefined; },
       prepare(Module) {
         const bounds = canvas.parentElement.getBoundingClientRect();
         geometry=displayGeometry(bounds,mode,globalThis.devicePixelRatio || 1,maxSize);
@@ -95,7 +95,8 @@ export function createWebGLRenderer(canvas, onFailure) {
         const mem=Module.HEAPU8;
         const packet=new Uint32Array(mem.buffer,pointer,32);
         if(packet[0]!==5 || packet[1]!==496 || packet[2]!==384 || packet[4]>32768*18) throw Error('Unsupported WebGL game frame.');
-        this.prepare(Module);
+        // The player prepares display geometry once per animation callback.
+        if (!geometry) this.prepare(Module);
         const {width:ow,height:oh,viewWidth}=geometry;
         if(canvas.width!==ow || canvas.height!==oh){canvas.width=ow;canvas.height=oh;}
         const count=packet[4], offset=packet[16]-(viewWidth-496)/2;

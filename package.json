@@ -10,6 +10,7 @@
     "build:site": "node scripts/package-site.mjs",
     "test:player": "node tests/virtual-on-player.cjs",
     "test:renderer": "node tests/renderer-check.cjs",
+    "test:webgl-performance": "node tests/webgl-performance.cjs",
     "build:player": "python3 scripts/build_virtual_on_standalone.py --player --wasm"
   },
   "devDependencies": {

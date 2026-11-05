@@ -95,6 +95,13 @@ Set `TEST_ROM=/path/to/von.zip` to exercise a parent archive; the test's game
 argument must match its detected region (`vonu` or `vonj`).
 `TEST_ROM=/path/to/von.zip npm run test:renderer` checks automatic WebGL 2
 fallback, including WebGPU initialization failures and device loss during combat.
+For before/after WebGL measurements, save the baseline `virtual-on-player.js`
+and `webgl-renderer.js` in a separate directory before editing, then run
+`TEST_BASELINE=/path/to/baseline TEST_ROM=/path/to/von.zip npm run test:webgl-performance`.
+This compares game state, cumulative audio and pixels before timing alternating
+baseline/candidate runs. `TEST_CPU_RATE=2` simulates a slower CPU; the default
+test viewport uses Retina scaling. The test uses Chrome's WebGL 2 path, so its
+results do not establish Safari performance.
 See [BUILDING.md](BUILDING.md) for offline engine rebuilding.
 
 ## Credits and rights

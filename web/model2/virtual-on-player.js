@@ -39,23 +39,30 @@ function input() {
   ports.forEach((value, port) => Module._von_input(port, value));
 }
 function advance(count = 1) {
-  for (let i = 0; i < count; ++i) {
-    input();
-    if (!Module._von_frame()) throw Error(Module.UTF8ToString(Module._von_error()));
-    if (!manual && audio?.state === 'running') {
-      const frames = Module._von_audio_count(), pointer = Module._von_audio();
-      const samples = Module.HEAPF32.subarray(pointer/4, pointer/4 + frames*2);
-      const buffer = audio.createBuffer(2, frames, 44100);
-      for (let c = 0; c < 2; ++c) {
-        const target = buffer.getChannelData(c);
-        for (let n = 0; n < frames; ++n) target[n] = samples[n*2+c];
+  // Simulate every arcade frame and play all its audio, but only prepare the
+  // final picture when catching up. Intermediate pictures cannot be displayed.
+  const batched = count > 1;
+  if (batched) Module._von_draw(0);
+  try {
+    for (let i = 0; i < count; ++i) {
+      if (batched && i === count - 1) Module._von_draw(1);
+      input();
+      if (!Module._von_frame()) throw Error(Module.UTF8ToString(Module._von_error()));
+      if (!manual && audio?.state === 'running') {
+        const frames = Module._von_audio_count(), pointer = Module._von_audio();
+        const samples = Module.HEAPF32.subarray(pointer/4, pointer/4 + frames*2);
+        const buffer = audio.createBuffer(2, frames, 44100);
+        for (let c = 0; c < 2; ++c) {
+          const target = buffer.getChannelData(c);
+          for (let n = 0; n < frames; ++n) target[n] = samples[n*2+c];
+        }
+        const source = audio.createBufferSource(); source.buffer = buffer; source.connect(audio.destination);
+        audioSources.add(source); source.onended = () => { audioSources.delete(source); source.disconnect(); };
+        if (audioNext < audio.currentTime || audioNext > audio.currentTime + .3) audioNext = audio.currentTime + .04;
+        source.start(audioNext); audioNext += frames/44100;
       }
-      const source = audio.createBufferSource(); source.buffer = buffer; source.connect(audio.destination);
-      audioSources.add(source); source.onended = () => { audioSources.delete(source); source.disconnect(); };
-      if (audioNext < audio.currentTime || audioNext > audio.currentTime + .3) audioNext = audio.currentTime + .04;
-      source.start(audioNext); audioNext += frames/44100;
     }
-  }
+  } finally { if (batched) Module._von_draw(1); }
   renderer.draw(Module, Module._von_packet());
 }
 function tick(now) {
@@ -64,7 +71,8 @@ function tick(now) {
     renderer.prepare(Module);
     lag += Math.min(now - (last || now), 100); last = now;
     let count = 0;
-    while (lag >= frameMS && count < 4) { advance(); lag -= frameMS; ++count; }
+    while (lag >= frameMS && count < 4) { lag -= frameMS; ++count; }
+    if (count) advance(count);
     if (now - statTime >= 1000) {
       const frames = Module._von_frames(), fps = (frames - statFrames) * 1000 / (now - statTime);
       window.model2StandaloneStats = { frames, fps, speed: fps * frameMS / 1000, polygons: Module._von_polygons(), standalone: true };
