@@ -63,6 +63,8 @@ fs.mkdirSync(out, { recursive: true });
         const frame = page.frames().find(f => f.url().includes('virtual-on-player.html'));
         const backend = await frame.evaluate(() => virtualOn.renderer.stats.backend);
         assert.match(backend, scenario === 'runtime-loss' ? /WebGPU$/ : /WebGL 2$/);
+        assert.equal(await frame.locator('#rendererNotice').isVisible(), scenario !== 'runtime-loss',
+          'The compatibility notice must appear only after switching to WebGL 2');
         const advance = async n => {
           for (let left = n; left > 0; left -= 30) await frame.evaluate(n => virtualOn.advance(n), Math.min(left, 30));
         };
@@ -119,6 +121,20 @@ fs.mkdirSync(out, { recursive: true });
           assert.ok(await frame.evaluate(() => Module._von_frames()) > before);
           results.push({ scenario, comparison });
         }
+        assert.equal(await frame.locator('#rendererNotice').isVisible(), true);
+        assert.match(await frame.locator('#rendererNotice').innerText(), /^WebGPU is unavailable\. Using WebGL 2\./);
+        assert.match(await frame.locator('#rendererNotice').innerText(), /WebGL 2 support is still in development/);
+        if (scenario === 'missing') {
+          await page.setViewportSize({ width: 390, height: 844 });
+          const bounds = await frame.locator('#rendererNotice').boundingBox();
+          assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390, 'Notice must fit a narrow screen');
+          await page.screenshot({ path: path.join(out, 'webgl-notice-mobile.png') });
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await page.screenshot({ path: path.join(out, 'webgl-notice-desktop.png') });
+        }
+        await frame.locator('#dismissRendererNotice').click();
+        assert.equal(await frame.locator('#rendererNotice').isVisible(), false);
+        assert.equal(await frame.evaluate(() => document.activeElement.id), 'screen', 'Dismissal must return keyboard input to the game');
         const visible = await frame.evaluate(() => {
           virtualOn.advance(0);
           return virtualOn.renderer.readPixels().some((v, i) => i % 4 < 3 && v !== 0);

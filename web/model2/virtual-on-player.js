@@ -4,6 +4,7 @@ import { importVirtualOn } from './virtual-on-roms.js';
 let canvas = document.querySelector('#screen');
 const display = document.querySelector('#display'), gameActions = document.querySelector('.game-actions');
 const quitButton = document.querySelector('#quitGame'), fullscreenButton = document.querySelector('#toggleFullscreen');
+const rendererNotice = document.querySelector('#rendererNotice');
 const send = (type, detail = '') => parent.postMessage({ scope: 'model2', type, detail }, location.origin);
 const report = text => send('status', text);
 const held = new TwinStickState();
@@ -113,6 +114,11 @@ gameActions.addEventListener('focusin', () => held.clear());
 quitButton.addEventListener('click', () => { quitButton.disabled = true; send('quit'); });
 fullscreenButton.addEventListener('click', () => send('toggle-fullscreen'));
 function focusGame() { canvas.focus(); if (running) void audio?.resume(); }
+rendererNotice.addEventListener('focusin', () => held.clear());
+document.querySelector('#dismissRendererNotice').addEventListener('click', () => {
+  rendererNotice.hidden = true;
+  focusGame();
+});
 canvas.addEventListener('pointerdown', focusGame);
 function replaceCanvas(previous) {
   const focused = document.activeElement === previous;
@@ -157,7 +163,10 @@ async function boot({ game, archives, displayMode = 'enhanced' }) {
     Module._von_gpu(1);
     renderer = await createRenderer(canvas, fail, {
       replaceCanvas,
-      onFallback: reason => send('log', `Using WebGL 2. WebGPU unavailable: ${reason}`),
+      onFallback: reason => {
+        rendererNotice.hidden = false;
+        send('log', `Using WebGL 2. WebGPU unavailable: ${reason}`);
+      },
     });
     renderer.setDisplayMode(displayMode); renderer.prepare(Module);
     audio = new AudioContext();
