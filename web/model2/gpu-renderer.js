@@ -47,8 +47,10 @@ export async function createGeneralRenderer(canvas, onFailure) {
   const device = await adapter.requestDevice();
   let disposed = false;
   device.lost.then(info => { if (!disposed) onFailure('WebGPU device lost: ' + info.message); });
-  device.addEventListener('uncapturederror', event => onFailure('WebGPU: ' + event.error.message));
-  const context = canvas.getContext('webgpu');
+  device.addEventListener('uncapturederror', event => { if (!disposed) onFailure('WebGPU: ' + event.error.message); });
+  let context;
+  try {
+  context = canvas.getContext('webgpu');
   if (!context) { disposed = true; device.destroy(); throw Error('Could not create a WebGPU canvas.'); }
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({ device, format, alphaMode: 'opaque' });
@@ -257,4 +259,9 @@ export async function createGeneralRenderer(canvas, onFailure) {
       context.unconfigure(); device.destroy();
     },
   };
+  } catch (error) {
+    disposed = true;
+    try { context?.unconfigure(); } finally { device.destroy(); }
+    throw error;
+  }
 }

@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Virtual-On ahead-of-time recompilation port for WebAssembly and WebGPU",
+  "description": "Virtual-On ahead-of-time recompilation port for WebAssembly, WebGPU and WebGL 2",
   "scripts": {
     "serve": "node scripts/serve.js . 8084",
     "test": "node --test tests/*.test.js",
     "build:site": "node scripts/package-site.mjs",
     "test:player": "node tests/virtual-on-player.cjs",
+    "test:renderer": "node tests/renderer-check.cjs",
     "build:player": "python3 scripts/build_virtual_on_standalone.py --player --wasm"
   },
   "devDependencies": {

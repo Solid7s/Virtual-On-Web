@@ -1,13 +1,13 @@
 # Virtual-On-Web
 
-**A WebAssembly / WebGPU recompilation port of Cyber Troopers Virtual-On.**
+**A WebAssembly recompilation port of Cyber Troopers Virtual-On, with WebGPU and WebGL 2 graphics.**
 
 [Play in your browser](https://solid7s.github.io/Virtual-On-Web/) ·
 [Releases](https://github.com/Solid7s/Virtual-On-Web/releases)
 
 Virtual-On-Web translates the arcade game's i960, SHARC, and 68000 CPU programs
 ahead of time into compiled WebAssembly. An independent Model 2 runtime handles
-the hardware, graphics, sound, and input, with WebGPU displaying the game.
+the hardware, graphics, sound, and input, with WebGPU or WebGL 2 displaying the game.
 
 This is a **recompilation (recomp) port**, not a decompilation project. It does
 not recover SEGA's original source code. 
@@ -15,7 +15,7 @@ not recover SEGA's original source code.
 ## Play
 
 1. Open the [website](https://solid7s.github.io/Virtual-On-Web/) in a browser with
-   WebGPU support. Desktop Chrome is the browser used for validation.
+   WebGPU or WebGL 2 support. Desktop Chrome is the browser used for validation.
 2. Select your own **`von.zip` parent ROM archive**. The player automatically
    detects a supported **USA or Japan Revision B** program inside it. A complete
    merged archive is sufficient; for split sets, select `von.zip` together with
@@ -54,6 +54,10 @@ Settings are saved locally per region; this is not a gameplay save-state feature
 
 ## Graphics
 
+The player prefers WebGPU and automatically falls back to WebGL 2 if WebGPU
+is unavailable, fails to initialize, or loses its graphics device during play.
+Switching renderers preserves the running game and selected graphics mode.
+
 - **Classic:** original arcade resolution and 4:3 presentation.
 - **Enhanced:** higher-resolution rendering with a 4:3 view.
 - **Enhanced+:** higher-resolution rendering with a wider view on wide displays.
@@ -89,6 +93,8 @@ For browser development checks, run `npm ci`, install Google Chrome, and use
 the local server running. The browser test uses your own USA and Japan archives.
 Set `TEST_ROM=/path/to/von.zip` to exercise a parent archive; the test's game
 argument must match its detected region (`vonu` or `vonj`).
+`TEST_ROM=/path/to/von.zip npm run test:renderer` checks automatic WebGL 2
+fallback, including WebGPU initialization failures and device loss during combat.
 See [BUILDING.md](BUILDING.md) for offline engine rebuilding.
 
 ## Credits and rights

@@ -139,7 +139,7 @@ $('launch').addEventListener('click', async () => {
     status('Reading ROM files locally…');
     logLines.length = 0;
     log(`Requested ${selected.id} (${selected.board}); awaiting engine ROM verification.`);
-    log(`Display: ${displayMode}; requested renderer: ${videoBackend}.`);
+    log(`Display: ${displayMode}; renderer: WebGPU with automatic WebGL 2 fallback.`);
     pendingArchives = await Promise.all(chosen.map(async ({ name, file }) => ({ name, bytes: await file.arrayBuffer() })));
     $('session').hidden = false;
     const engine = executionEngine(selected.id, videoBackend);

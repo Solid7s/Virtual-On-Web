@@ -1,7 +1,7 @@
-import { createGeneralRenderer } from './gpu-renderer.js';
+import { createRenderer } from './renderer.js';
 import { TwinStickState } from './twin-stick.js';
 import { importVirtualOn } from './virtual-on-roms.js';
-const canvas = document.querySelector('#screen');
+let canvas = document.querySelector('#screen');
 const display = document.querySelector('#display'), gameActions = document.querySelector('.game-actions');
 const quitButton = document.querySelector('#quitGame'), fullscreenButton = document.querySelector('#toggleFullscreen');
 const send = (type, detail = '') => parent.postMessage({ scope: 'model2', type, detail }, location.origin);
@@ -104,7 +104,16 @@ window.addEventListener('blur', () => { held.clear(); hideGameActions(); });
 gameActions.addEventListener('focusin', () => held.clear());
 quitButton.addEventListener('click', () => { quitButton.disabled = true; send('quit'); });
 fullscreenButton.addEventListener('click', () => send('toggle-fullscreen'));
-canvas.addEventListener('pointerdown', () => { canvas.focus(); if (running) void audio?.resume(); });
+function focusGame() { canvas.focus(); if (running) void audio?.resume(); }
+canvas.addEventListener('pointerdown', focusGame);
+function replaceCanvas(previous) {
+  const focused = document.activeElement === previous;
+  canvas = previous.cloneNode(false);
+  previous.replaceWith(canvas);
+  canvas.addEventListener('pointerdown', focusGame);
+  if (focused) canvas.focus();
+  return canvas;
+}
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { autoPaused = running && !manual; if (autoPaused) pause(); }
   else if (autoPaused) { autoPaused = false; resume(); }
@@ -138,12 +147,14 @@ async function boot({ game, archives, displayMode = 'enhanced' }) {
     if (!Module.ccall('von_init', 'number', ['string', 'number'], ['/virtual-on', Number(game === 'vonj')]))
       throw Error(Module.UTF8ToString(Module._von_error()));
     Module._von_gpu(1);
-    renderer = await createGeneralRenderer(canvas, fail);
-    renderer.stats.backend = 'Standalone Virtual-On + WebGPU';
+    renderer = await createRenderer(canvas, fail, {
+      replaceCanvas,
+      onFallback: reason => send('log', `Using WebGL 2. WebGPU unavailable: ${reason}`),
+    });
     renderer.setDisplayMode(displayMode); renderer.prepare(Module);
     audio = new AudioContext();
     void audio.resume();
-    Module.model2GpuStats = renderer.stats;
+    Object.defineProperty(Module, 'model2GpuStats', { get: () => renderer.stats });
     window.virtualOn = { advance, pause, resume, save, Module, held, renderer };
     running = true; statTime = performance.now();
     report('');
